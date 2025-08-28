@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>게임 정산표</title>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f9; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2 { border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 0; }
+        button, select, input { font-size: 14px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+        button { background-color: #007bff; color: white; border: none; padding: 8px 12px; cursor: pointer; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button.delete-btn { background-color: #dc3545; }
+        button.action-btn { background-color: #28a745; }
+        .item-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 15px; border: 1px solid #ddd; background-color: #fafafa; }
+        #player-list .item-row { border-radius: 0; margin-top: 0; }
+        #player-list .item-row + .item-row { border-top: none; }
+        #player-list .item-row:first-child { border-top-left-radius: 6px; border-top-right-radius: 6px; }
+        #player-list .item-row:last-child { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+        .summary-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.95em; }
+        .summary-table th, .summary-table td { border: 1px solid #ddd; padding: 8px; }
+        .summary-table th { background-color: #f2f2f2; }
+        .date-selector, .rank-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; padding: 10px; background-color: #e9ecef; border-radius: 6px; }
+        .player-entries { display: inline-flex; gap: 5px; align-items: center; background-color: #e9ecef; padding: 5px; border-radius: 4px; min-height: 20px; }
+        .player-entries span { background-color: #007bff; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.9em; }
+        .dealer-num, .player-num { font-weight: bold; font-size: 1.2em; margin-right: 5px; color: #6c757d; }
+        .text-center { text-align: center; }
+        .summary-table td, .summary-table th { text-align: center; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background-color: white; padding: 25px; border-radius: 8px; width: 600px; max-height: 80vh; overflow-y: auto; }
+        .modal-content h3 { margin-top: 0; }
+        .modal-actions { text-align: right; margin-top: 20px; }
+        #prize-editor-table input { width: 100px; text-align: right; }
+        #prize-editor-table select { width: 120px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>게임 정산표</h1>
+    <div class="date-selector">
+        <input type="date" id="game-date">
+        <span id="day-of-week"></span>
+        <button id="today-btn">Today</button>
+        <select id="tournament-select">
+            <option value="t1">토너1</option>
+            <option value="t2">토너2</option>
+            <option value="t3">토너3</option>
+        </select>
+        <button id="confirm-btn" style="background-color: #17a2b8;">확정</button>
+    </div>
+
+    <div class="section"><h2>딜러 관리</h2><div id="dealer-list"></div><button id="add-dealer-btn" style="margin-top: 10px;">딜러 추가</button></div>
+    <div class="section"><h2>플레이어 관리</h2><div id="player-list"></div><button id="add-player-btn" style="margin-top: 10px;">플레이어 추가</button></div>
+    <div class="section"><h2>등수 지정</h2><div id="rank-assignment" class="rank-selector"></div></div>
+    
+    <div id="final-results-area">
+        <div class="section">
+            <h2 class="text-center">게임 결과</h2>
+            <div id="results-summary" class="text-center">
+                <h3>🏆 상금 현황</h3>
+                <div id="prize-pool">총상금: 0 포인트</div>
+                <table class="summary-table">
+                    <thead><tr><th>등수</th><th>플레이어</th><th>상금</th><th>비율</th></tr></thead>
+                    <tbody id="prize-distribution-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="section">
+            <h2 class="text-center">딜러 정산 요약</h2>
+            <table class="summary-table">
+                <thead><tr><th>#</th><th>딜러명</th><th>시작시간</th><th>마감시간</th><th>총 근무시간</th><th>포인트</th></tr></thead>
+                <tbody id="dealer-summary-body"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="game-controls" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button id="edit-prize-btn" style="background-color: #ffc107; color: #212529;">상금 현황 수정</button>
+        <button id="game-end-btn" style="background-color:#6f42c1;">결과 이미지 저장</button>
+    </div>
+
+</div>
+<div class="container" style="margin-top:20px; text-align: right;">
+    <button id="new-game-btn" style="background-color: #fd7e14;">새로운 정산 시작</button>
+</div>
+
+<div id="prize-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>상금 현황 수정</h3>
+        <p>총상금 <strong id="modal-total-prize">0</strong> 포인트를 유지해야 합니다. 현재 합계: <strong id="modal-current-sum">0</strong></p>
+        <table class="summary-table" id="prize-editor-table">
+            <thead><tr><th>등수</th><th>플레이어</th><th>상금 (포인트)</th><th>삭제</th></tr></thead>
+            <tbody></tbody>
+        </table>
+        <div class="modal-actions">
+            <button id="add-rank-btn" type="button" style="float: left;">등수 추가</button>
+            <button id="modal-close-btn" type="button" style="background-color: #6c757d;">취소</button>
+            <button id="modal-save-btn" type="button">수정 완료</button>
+        </div>
+    </div>
+</div>
+
+<datalist id="dealer-names-list">
+    {% for name in dealers %}
+    <option value="{{ name }}">
+    {% endfor %}
+</datalist>
+<datalist id="player-names-list">
+    {% for name in players %}
+    <option value="{{ name }}">
+    {% endfor %}
+</datalist>
+
+<script type="module">
+    // ### Firebase v9+ SDK Import ###
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ### 보내주신 Firebase 설정 정보 ###
+    const firebaseConfig = {
+        apiKey: "AIzaSyDxwPHSfIlcCii9RLBG9vhwQj2mhjzj3B8",
+        authDomain: "holdemresult-8e89d.firebaseapp.com",
+        projectId: "holdemresult-8e89d",
+        storageBucket: "holdemresult-8e89d.appspot.com",
+        messagingSenderId: "73783503951",
+        appId: "1:73783503951:web:c0d504d039a163f459ce3a",
+        measurementId: "G-EQ5F9VXQWV"
+    };
+
+    // ### Firebase 초기화 ###
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // --- 초기 데이터 설정 ---
+    const DEALER_NAMES = {{ dealers | tojson }};
+    const PLAYER_NAMES = {{ players | tojson }};
+    
+    // --- DOM 요소 및 전역 변수 ---
+    const dealerList = document.getElementById('dealer-list');
+    const playerList = document.getElementById('player-list');
+    const prizePoolEl = document.getElementById('prize-pool');
+    const prizeDistributionBody = document.getElementById('prize-distribution-body');
+    const gameDateEl = document.getElementById('game-date');
+    const dayOfWeekEl = document.getElementById('day-of-week');
+    const rankAssignmentEl = document.getElementById('rank-assignment');
+    const dealerSummaryBody = document.getElementById('dealer-summary-body');
+    const prizeModal = document.getElementById('prize-modal');
+    const tournamentSelect = document.getElementById('tournament-select');
+    let totalPrizeForModal = 0;
+
+    // --- 이벤트 리스너 ---
+    document.getElementById('add-dealer-btn').addEventListener('click', addDealerRow);
+    document.getElementById('add-player-btn').addEventListener('click', addPlayerRow);
+    document.getElementById('today-btn').addEventListener('click', setToday);
+    document.getElementById('confirm-btn').addEventListener('click', saveStateToFirebase);
+    document.getElementById('new-game-btn').addEventListener('click', startNewGame);
+    document.getElementById('game-end-btn').addEventListener('click', endGameAndCapture);
+    document.getElementById('edit-prize-btn').addEventListener('click', openPrizeModal);
+    
+    // ### 버그 수정: 누락되었던 이벤트 리스너를 다시 추가했습니다. ###
+    dealerList.addEventListener('click', handleDealerActions);
+    playerList.addEventListener('click', handlePlayerActions);
+    playerList.addEventListener('input', handlePlayerInputs);
+    
+    prizeModal.addEventListener('click', handleModalActions);
+    prizeModal.addEventListener('input', handleModalInputs);
+    
+    // --- Firebase 연동 함수 ---
+    async function saveStateToFirebase() {
+        const state = getCurrentState();
+        try {
+            await setDoc(doc(db, "gameStates", "latestState"), state);
+            alert("데이터가 성공적으로 저장되었습니다.");
+        } catch (error) {
+            console.error("Firebase 저장 실패! 상세 오류:", error);
+            alert(`데이터 저장에 실패했습니다. 개발자 콘솔(F12)의 오류 메시지를 확인해주세요. 오류 코드: ${error.code}`);
+        }
+    }
+
+    async function loadLatestState() {
+        try {
+            const docRef = doc(db, "gameStates", "latestState");
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                console.log("마지막 데이터를 불러옵니다.");
+                restoreState(docSnap.data());
+            } else {
+                console.log("저장된 데이터가 없습니다. 새로 시작합니다.");
+                setToday();
+                updateAll();
+            }
+        } catch (error) { console.error("데이터 불러오기 오류: ", error); }
+    }
+    
+    function getCurrentState() {
+        return {
+            date: gameDateEl.value,
+            tournamentId: tournamentSelect.value,
+            dealers: Array.from(document.querySelectorAll('#dealer-list .item-row')).map(row => ({ name: row.querySelector('.dealer-name').value, startHour: row.querySelector('.start-hour').value, startMinute: row.querySelector('.start-minute').value, endHour: row.querySelector('.end-hour').value, endMinute: row.querySelector('.end-minute').value, resultHTML: row.querySelector('.result').innerHTML, isClosed: row.querySelector('.close-btn').disabled, })),
+            players: Array.from(document.querySelectorAll('#player-list .item-row')).map(row => ({ name: row.querySelector('.player-name').value, entryFee: row.querySelector('.entry-fee').checked, earlyBird: row.querySelector('.early-bird').checked, entries: JSON.parse(row.dataset.entries || '[]'), })),
+            ranks: Array.from(document.querySelectorAll('#rank-assignment select')).map(select => select.value),
+            customPrizes: JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'),
+        };
+    }
+
+    function restoreState(state) {
+        dealerList.innerHTML = '';
+        playerList.innerHTML = '';
+        gameDateEl.value = state.date;
+        tournamentSelect.value = state.tournamentId || 't1';
+        updateDayOfWeek();
+        (state.dealers || []).forEach(data => addDealerRow(data));
+        (state.players || []).forEach(data => addPlayerRow(data));
+        if (state.customPrizes) { prizeDistributionBody.dataset.customPrizes = JSON.stringify(state.customPrizes); }
+        updateAll(state.ranks);
+    }
+    
+    // --- 주요 업데이트 함수 ---
+    function updateAll(ranksToRestore = []) {
+        renumberDealers();
+        renumberPlayers();
+        updateWinnerSelectionDropdowns(ranksToRestore);
+        updateGameSummary();
+        updateDealerSummaryTable();
+    }
+    
+    // --- 새 게임 / 게임 종료 ---
+    async function startNewGame() {
+        if (confirm('정말로 모든 기록을 지우고 처음부터 시작하시겠습니까? Firebase에 저장된 데이터도 삭제됩니다.')) {
+            try {
+                await deleteDoc(doc(db, "gameStates", "latestState"));
+                alert("저장된 데이터가 삭제되었습니다.");
+                location.reload();
+            } catch (error) {
+                console.error("데이터 삭제 오류:", error);
+                alert("데이터 삭제에 실패했습니다.");
+            }
+        }
+    }
+
+    function endGameAndCapture() { if (confirm('결과를 이미지로 저장하시겠습니까?')) { html2canvas(document.getElementById('final-results-area'), { scale: 2 }).then(canvas => { const link = document.createElement('a'); link.download = `게임정산_${gameDateEl.value || 'data'}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); } }
+
+    // --- 날짜 관련 ---
+    const KOREAN_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+    function setToday() { const today = new Date(); gameDateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); updateDayOfWeek(); }
+    gameDateEl.addEventListener('change', updateDayOfWeek);
+    function updateDayOfWeek() { const selectedDate = new Date(gameDateEl.value); const dayIndex = new Date(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()).getDay(); dayOfWeekEl.textContent = `(${KOREAN_DAYS[dayIndex]})`; }
+    
+    // --- 딜러 관리 ---
+    function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
+    function addDealerRow(data = {}) { const row = document.createElement('div'); row.className = 'item-row'; const hourOptions = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join(''); const minOptions = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join(''); row.innerHTML = `<input type="text" class="dealer-name" list="dealer-names-list" placeholder="딜러 이름 입력..." value="${data.name || ''}"> <strong>시작:</strong> <select class="start-hour">${hourOptions}</select>:<select class="start-minute">${minOptions}</select> <button class="action-btn start-now-btn">NOW</button> <strong style="margin-left:10px;">마감:</strong> <select class="end-hour">${hourOptions}</select>:<select class="end-minute">${minOptions}</select> <button class="action-btn end-now-btn">NOW</button> <button class="action-btn close-btn" style="margin-left:10px;">계산</button> <button class="delete-btn">삭제</button> <div class="result">${data.resultHTML || ''}</div>`; dealerList.appendChild(row); if (data.startHour) row.querySelector('.start-hour').value = data.startHour; if (data.startMinute) row.querySelector('.start-minute').value = data.startMinute; if (data.endHour) row.querySelector('.end-hour').value = data.endHour; if (data.endMinute) row.querySelector('.end-minute').value = data.endMinute; if (data.isClosed) { row.querySelectorAll('select, input, .action-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; } updateAll(); }
+    function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, input, .action-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
+    function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
+
+    // --- 플레이어 관리 & 등수 지정 ---
+    function renumberPlayers() { document.querySelectorAll('#player-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.player-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'player-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
+    function addPlayerRow(data = {}) { const row = document.createElement('div'); row.className = 'item-row player-row'; row.dataset.entries = JSON.stringify(data.entries || []); row.innerHTML = `<input type="text" class="player-name" list="player-names-list" placeholder="플레이어 이름 입력..." value="${data.name || ''}"> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`; playerList.appendChild(row); renderPlayerEntries(row); updateAll(); }
+    function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
+    function handlePlayerActions(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.add-entry-btn')) { const entries = JSON.parse(row.dataset.entries); entries.push(row.querySelector('.entry-type').value); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); updateAll(); } else if (target.matches('.delete-btn')) { const entries = JSON.parse(row.dataset.entries); if (entries.length > 0) { entries.pop(); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); } else { row.remove(); } updateAll(); } }
+    function handlePlayerInputs(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.player-name')) { updateAll(); } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { renderPlayerEntries(row); updateAll(); } }
+    function updateWinnerSelectionDropdowns(ranksToRestore = []) { const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(input => input.value).filter(name => name); const maxRank = Math.min(5, prizeConfigForCount(players.length).length); rankAssignmentEl.innerHTML = ''; for (let i = 1; i <= maxRank; i++) { const label = document.createElement('label'); label.textContent = `${i}등:`; const select = document.createElement('select'); select.id = `rank-${i}`; select.innerHTML = `<option value="">--선택--</option>` + players.map(p => `<option value="${p}">${p}</option>`).join(''); select.value = ranksToRestore[i-1] || ''; select.addEventListener('change', updateGameSummary); rankAssignmentEl.appendChild(label); rankAssignmentEl.appendChild(select); } }
+    
+    // --- 게임 결과 계산 ---
+    function updateGameSummary() { let prizeBuyInCount = 0; const playerRows = document.querySelectorAll('.player-row'); playerRows.forEach(row => { prizeBuyInCount += JSON.parse(row.dataset.entries || '[]').length; }); const totalPrize = prizeBuyInCount * 250; totalPrizeForModal = totalPrize; prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); if (customPrizes) { renderCustomPrizes(customPrizes); } else { calculatePrizeDistribution(totalPrize, playerRows.length); } }
+    function calculatePrizeDistribution(totalPrize, playerCount) { prizeDistributionBody.innerHTML = ''; prizeDistributionBody.removeAttribute('data-custom-prizes'); const prizeConfig = prizeConfigForCount(playerCount); if (prizeConfig.length > 0) { prizeConfig.forEach(p => { const winnerSelect = document.getElementById(`rank-${p.r}`); const winnerName = winnerSelect ? winnerSelect.value : ''; const prize = Math.round(totalPrize * p.p); prizeDistributionBody.innerHTML += `<tr><td>${p.r}등</td><td>${winnerName || ''}</td> <td>${prize.toLocaleString()} 포인트</td> <td>${(p.p * 100).toFixed(0)}%</td></tr>`; }); } }
+
+    // --- 상금 수정 모달 ---
+    function openPrizeModal() { const prizeRows = prizeDistributionBody.querySelectorAll('tr'); const editorBody = prizeModal.querySelector('#prize-editor-table tbody'); editorBody.innerHTML = ''; const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(input => input.value).filter(Boolean); if (prizeRows.length > 0) { prizeRows.forEach(row => { const rankText = row.cells[0].textContent; const winnerName = row.cells[1].textContent; const prizeText = row.cells[2].textContent.replace(/[^0-9]/g, ''); addPrizeEditorRow({ rank: rankText, player: winnerName, prize: prizeText }, players); }); } else { addPrizeEditorRow({rank: '1등'}, players); } document.getElementById('modal-total-prize').textContent = totalPrizeForModal.toLocaleString(); updateModalSum(); prizeModal.style.display = 'flex'; }
+    function addPrizeEditorRow(data = {}, players) { const editorBody = prizeModal.querySelector('#prize-editor-table tbody'); const tr = document.createElement('tr'); const playerOptions = createDropdownOptions(players, data.player); tr.innerHTML = `<td><input type="text" class="modal-rank" value="${data.rank || (editorBody.rows.length + 1) + '등'}" style="width:50px;"></td><td><select class="modal-player">${playerOptions}</select></td><td><input type="number" class="modal-prize" value="${data.prize || 0}"></td><td><button type="button" class="delete-btn modal-delete-rank">X</button></td>`; editorBody.appendChild(tr); }
+    function handleModalActions(e) { const target = e.target; if (target.matches('#modal-close-btn') || !target.closest('.modal-content')) { prizeModal.style.display = 'none'; } else if (target.matches('#add-rank-btn')) { const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(input => input.value).filter(Boolean); addPrizeEditorRow({}, players); } else if (target.matches('.modal-delete-rank')) { target.closest('tr').remove(); updateModalSum(); } else if (target.matches('#modal-save-btn')) { const currentSum = Array.from(prizeModal.querySelectorAll('.modal-prize')).reduce((sum, input) => sum + (Number(input.value) || 0), 0); if (currentSum !== totalPrizeForModal) { alert(`상금의 총합이 다릅니다! (총상금: ${totalPrizeForModal.toLocaleString()}, 현재 합계: ${currentSum.toLocaleString()})`); return; } const customPrizes = Array.from(prizeModal.querySelectorAll('#prize-editor-table tbody tr')).map(row => ({ rank: row.querySelector('.modal-rank').value, player: row.querySelector('.modal-player').value, prize: row.querySelector('.modal-prize').value, })); prizeDistributionBody.dataset.customPrizes = JSON.stringify(customPrizes); renderCustomPrizes(customPrizes); prizeModal.style.display = 'none'; alert("상금 현황이 수정되었습니다. '확정' 버튼을 눌러 저장해주세요."); } }
+    function updateModalSum() { const currentSum = Array.from(prizeModal.querySelectorAll('.modal-prize')).reduce((sum, input) => sum + (Number(input.value) || 0), 0); document.getElementById('modal-current-sum').textContent = currentSum.toLocaleString(); }
+    function handleModalInputs(e) { if (e.target.matches('.modal-prize')) { updateModalSum(); } }
+    function renderCustomPrizes(customPrizes) { prizeDistributionBody.innerHTML = ''; customPrizes.forEach(p => { const percentage = totalPrizeForModal > 0 ? ((p.prize / totalPrizeForModal) * 100).toFixed(1) : 0; prizeDistributionBody.innerHTML += `<tr><td>${p.rank}</td><td>${p.player || ''}</td> <td>${Number(p.prize).toLocaleString()} 포인트</td> <td>${percentage}%</td></tr>`; }); }
+
+    // --- 유틸리티 함수 ---
+    function createDropdownOptions(names, selectedValue) { return `<option value="">--선택--</option>` + names.map(name => `<option value="${name}" ${name === selectedValue ? 'selected' : ''}>${name}</option>`).join(''); }
+    function prizeConfigForCount(count) { if (count >= 5 && count <= 7) return [{ r: 1, p: 0.65 }, { r: 2, p: 0.35 }]; if (count >= 8 && count <= 11) return [{ r: 1, p: 0.60 }, { r: 2, p: 0.30 }, { r: 3, p: 0.10 }]; if (count >= 12 && count <= 17) return [{ r: 1, p: 0.50 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 10 }]; if (count >= 18 && count <= 35) return [{ r: 1, p: 0.45 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }, { r: 5, p: 0.05 }]; return []; }
+    
+    // --- 페이지 로드 ---
+    document.addEventListener('DOMContentLoaded', loadLatestState);
+</script>
+</body>
+</html>
