@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>게임 정산표</title>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f9; color: #333; }
         .container { max-width: 900px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -54,6 +54,9 @@
 
 <div class="container">
     <h1>게임 정산표</h1>
+        <p style="text-align: center; color: #dc3545; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;">
+        <strong>주의!</strong> 동시 접속시 데이터가 저장 안 될 수도 있습니다. 꼭 한명씩 접속바랍니다. 딜러가 잘 챙기기!
+    </p>
     <div class="date-selector">
         <input type="date" id="game-date">
         <span id="day-of-week"></span>
@@ -89,7 +92,7 @@
             <h2 class="text-center">게임 결과</h2>
             <div id="results-summary" class="text-center">
                 <div id="game-info-display"></div>
-                <h3>🏆 플레이어 현황</h3>
+                <h3>🏆 플레이어</h3>
                 <table class="summary-table">
                     <thead>
                         <tr>
@@ -104,7 +107,7 @@
                     </thead>
                     <tbody id="player-summary-body"></tbody>
                 </table>
-                <h3 style="margin-top: 20px;">🏆 상금 현황</h3>
+                <h3 style="margin-top: 20px;">🏆 Prize</h3>
                 <div id="prize-pool">총상금: 0 포인트</div>
                 <table class="summary-table">
                     <thead><tr><th>등수</th><th>플레이어</th><th>상금</th><th>비율</th></tr></thead>
