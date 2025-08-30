@@ -1,6 +1,7 @@
 # app.py (수정된 전체 코드)
 
 from flask import Flask, render_template, jsonify
+from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
@@ -19,6 +20,7 @@ except Exception as e:
 # ------------------------------------
 
 app = Flask(__name__)
+CORS(app)
 
 PLAYER_NAMES = [
     "강아지똥", "고구마", "귤", "나미", "나인", "노하", "돌멩이", "돌체", "디네로", "뚜", "룰루", "림프", "망고", "문문", "상일", "세준", "송하", "스냅", "승민", "안아줘요", "야도란", "영재", "예수", "오팔", "옥수수", "용준", "우주", "유미", "의성", "이방인", "인사이더", "자쓰민", "장현", "재혁", "지구", "지호", "진상", "찐빵", "철", "체크", "카피바라", "쿠쿠", "태산", "팔팔", "팝스타", "팬더", "포카드", "하람", "현", "호준", "홍", "환경", "황", "훈", "BOK", "DD", "DY", "HM", "KJ", "Lin"
