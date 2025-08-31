@@ -298,13 +298,29 @@
     
     function renumberPlayers() { document.querySelectorAll('#player-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.player-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'player-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
     function addPlayerRow(data = {}) {
-        const row = document.createElement('div'); row.className = 'item-row player-row'; row.dataset.entries = JSON.stringify(data.entries || []);
-        const playerOptions = createDropdownOptions(PLAYER_NAMES, data.name, true);
-        row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptions}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <button class="save-btn" style="background-color: #17a2b8; margin-left: 5px;">실시간저장</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
-        playerList.appendChild(row);
-        addSaveButtonListeners();
-        renderPlayerEntries(row); updateAll();
+    const row = document.createElement('div');
+    row.className = 'item-row player-row';
+    row.dataset.entries = JSON.stringify(data.entries || []);
+    
+    let playerOptionsHTML = createDropdownOptions(PLAYER_NAMES, data.name, true);
+
+    // 저장된 이름(data.name)이 있고, 기본 목록(PLAYER_NAMES)에 없는 경우 (직접 입력된 게스트)
+    if (data.name && !PLAYER_NAMES.includes(data.name)) {
+        // 드롭다운 목록에 해당 게스트를 선택된 상태로 추가
+        playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
     }
+
+    row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptionsHTML}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
+    playerList.appendChild(row);
+    
+    // 만약 데이터로 복원된 이름이 있다면, 드롭다운의 값을 강제로 한번 더 설정해준다.
+    if(data.name) {
+        row.querySelector('.player-name').value = data.name;
+    }
+
+    renderPlayerEntries(row);
+    updateAll();
+}
     function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
     
     function handlePlayerActions(e) {
