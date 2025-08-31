@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>게임 정산표</title>
-        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f9; color: #333; }
         .container { max-width: 900px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -54,7 +54,7 @@
 
 <div class="container">
     <h1>게임 정산표</h1>
-        <p style="text-align: center; color: #dc3545; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;">
+    <p style="text-align: center; color: #dc3545; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;">
         <strong>주의!</strong> 동시 접속시 데이터가 저장 안 될 수도 있습니다. 꼭 한명씩 접속바랍니다. 딜러가 잘 챙기기!
     </p>
     <div class="date-selector">
@@ -66,7 +66,7 @@
             <option value="t2">토너2</option>
             <option value="t3">토너3</option>
         </select>
-        <button id="confirm-btn-top" class="save-btn" style="background-color: #17a2b8;">실시간저장</button>
+        <button class="save-btn" style="background-color: #17a2b8;">실시간저장</button>
     </div>
 
     <div class="section">
@@ -92,7 +92,7 @@
             <h2 class="text-center">게임 결과</h2>
             <div id="results-summary" class="text-center">
                 <div id="game-info-display"></div>
-                <h3>🏆 플레이어</h3>
+                <h3>🏆 플레이어 현황</h3>
                 <table class="summary-table">
                     <thead>
                         <tr>
@@ -107,7 +107,7 @@
                     </thead>
                     <tbody id="player-summary-body"></tbody>
                 </table>
-                <h3 style="margin-top: 20px;">🏆 Prize</h3>
+                <h3 style="margin-top: 20px;">🏆 상금 현황</h3>
                 <div id="prize-pool">총상금: 0 포인트</div>
                 <table class="summary-table">
                     <thead><tr><th>등수</th><th>플레이어</th><th>상금</th><th>비율</th></tr></thead>
@@ -217,10 +217,9 @@
         try {
             await setDoc(doc(db, "gameStates", "latestState"), state);
             alert("데이터가 성공적으로 저장되었습니다.");
-            updateGameInfoDisplay();
         } catch (error) {
             console.error("Firebase 저장 실패! 상세 오류:", error);
-            alert(`데이터 저장에 실패했습니다. 개발자 콘솔(F12)의 오류 메시지를 확인해주세요. 오류 코드: ${error.code}`);
+            alert(`데이터 저장에 실패했습니다.`);
         }
     }
     async function loadLatestState() {
@@ -233,7 +232,6 @@
                 setToday();
                 updateAll();
             }
-            updateGameInfoDisplay();
         } catch (error) { console.error("데이터 불러오기 오류: ", error); }
     }
     function getCurrentState() {
@@ -277,7 +275,7 @@
     }
     function endGameAndCapture() { if (confirm('결과를 이미지로 저장하시겠습니까?')) { html2canvas(document.getElementById('final-results-area'), { scale: 2 }).then(canvas => { const link = document.createElement('a'); const tourneyText = tournamentSelect.options[tournamentSelect.selectedIndex].text; link.download = `게임정산_${gameDateEl.value}_${tourneyText}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); } }
     const KOREAN_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
-    function setToday() { const today = new Date(); gameDateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); updateDayOfWeek(); updateGameInfoDisplay(); }
+    function setToday() { const today = new Date(); gameDateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); updateDayOfWeek(); }
     function updateDayOfWeek() { const selectedDate = new Date(gameDateEl.value); const dayIndex = new Date(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()).getDay(); dayOfWeekEl.textContent = `(${KOREAN_DAYS[dayIndex]})`; updateGameInfoDisplay(); }
     function updateGameInfoDisplay() { const date = gameDateEl.value; const dayOfWeek = dayOfWeekEl.textContent; const tournamentText = tournamentSelect.options[tournamentSelect.selectedIndex].text; if (date) { gameInfoDisplayEl.textContent = `${date} ${dayOfWeek} / ${tournamentText}`; } else { gameInfoDisplayEl.textContent = ''; } }
     
@@ -298,60 +296,21 @@
     
     function renumberPlayers() { document.querySelectorAll('#player-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.player-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'player-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
     function addPlayerRow(data = {}) {
-    const row = document.createElement('div');
-    row.className = 'item-row player-row';
-    row.dataset.entries = JSON.stringify(data.entries || []);
-    
-    let playerOptionsHTML = createDropdownOptions(PLAYER_NAMES, data.name, true);
-
-    // 저장된 이름(data.name)이 있고, 기본 목록(PLAYER_NAMES)에 없는 경우 (직접 입력된 게스트)
-    if (data.name && !PLAYER_NAMES.includes(data.name)) {
-        // 드롭다운 목록에 해당 게스트를 선택된 상태로 추가
-        playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
-    }
-
-    row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptionsHTML}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
-    playerList.appendChild(row);
-    
-    // 만약 데이터로 복원된 이름이 있다면, 드롭다운의 값을 강제로 한번 더 설정해준다.
-    if(data.name) {
-        row.querySelector('.player-name').value = data.name;
-    }
-
-    renderPlayerEntries(row);
-    updateAll();
-}
-    function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
-    
-    function handlePlayerActions(e) {
-        const target = e.target; const row = target.closest('.player-row'); if (!row) return;
-        let prizeShouldReset = false;
-
-        if (target.matches('.add-entry-btn')) {
-            const entries = JSON.parse(row.dataset.entries);
-            entries.push(row.querySelector('.entry-type').value);
-            row.dataset.entries = JSON.stringify(entries);
-            renderPlayerEntries(row);
-            prizeShouldReset = true;
-        } else if (target.matches('.delete-btn')) {
-            const entries = JSON.parse(row.dataset.entries);
-            if (entries.length > 0) {
-                entries.pop();
-                row.dataset.entries = JSON.stringify(entries);
-                renderPlayerEntries(row);
-            } else {
-                row.remove();
-            }
-            prizeShouldReset = true;
+        const row = document.createElement('div'); row.className = 'item-row player-row';
+        row.dataset.entries = JSON.stringify(data.entries || []);
+        let playerOptionsHTML = createDropdownOptions(PLAYER_NAMES, data.name, true);
+        if (data.name && !PLAYER_NAMES.includes(data.name)) {
+            playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
         }
-        
-        if (prizeShouldReset) {
-            prizeDistributionBody.removeAttribute('data-custom-prizes');
-            document.querySelectorAll('#rank-assignment select').forEach(select => select.value = '');
-        }
+        row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptionsHTML}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <button class="save-btn" style="background-color: #17a2b8; margin-left: 5px;">실시간저장</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
+        playerList.appendChild(row);
+        if(data.name) { row.querySelector('.player-name').value = data.name; }
+        renderPlayerEntries(row); 
         updateAll();
+        addSaveButtonListeners();
     }
-
+    function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
+    function handlePlayerActions(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.add-entry-btn')) { const entries = JSON.parse(row.dataset.entries); entries.push(row.querySelector('.entry-type').value); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); prizeDistributionBody.removeAttribute('data-custom-prizes'); document.querySelectorAll('#rank-assignment select').forEach(select => select.value = ''); updateAll(); } else if (target.matches('.delete-btn')) { const entries = JSON.parse(row.dataset.entries); if (entries.length > 0) { entries.pop(); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); } else { row.remove(); } prizeDistributionBody.removeAttribute('data-custom-prizes'); document.querySelectorAll('#rank-assignment select').forEach(select => select.value = ''); updateAll(); } }
     function handlePlayerInputs(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.player-name')) { if (target.value === '__DIRECT_INPUT__') { const customName = prompt('플레이어 닉네임을 입력하세요:', ''); if (customName && customName.trim() !== '') { const newOption = new Option(customName.trim(), customName.trim(), true, true); target.add(newOption); } else { target.value = ''; } } updateAll(); } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { renderPlayerEntries(row); updateAll(); } }
     
     function updatePlayerSummaryTable() {
@@ -371,29 +330,7 @@
         });
     }
     
-    function updateWinnerSelectionDropdowns(ranksToRestore = []) {
-        const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
-        const maxRank = Math.min(5, prizeConfigForCount(players.length).length);
-        rankAssignmentEl.innerHTML = '';
-        if (maxRank > 0) {
-            for (let i = 1; i <= maxRank; i++) {
-                const label = document.createElement('label'); label.textContent = `${i}등:`;
-                const select = document.createElement('select'); select.id = `rank-${i}`;
-                select.innerHTML = `<option value="">--선택--</option>` + players.map(p => `<option value="${p}">${p}</option>`).join('');
-                select.value = ranksToRestore[i-1] || '';
-                select.addEventListener('change', updateGameSummary);
-                rankAssignmentEl.appendChild(label);
-                rankAssignmentEl.appendChild(select);
-            }
-            const saveBtn = document.createElement('button');
-            saveBtn.className = 'save-btn';
-            saveBtn.style.backgroundColor = '#17a2b8';
-            saveBtn.style.marginLeft = '10px';
-            saveBtn.textContent = '실시간저장';
-            rankAssignmentEl.appendChild(saveBtn);
-            addSaveButtonListeners();
-        }
-    }
+    function updateWinnerSelectionDropdowns(ranksToRestore = []) { const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name); const maxRank = Math.min(5, prizeConfigForCount(players.length).length); rankAssignmentEl.innerHTML = ''; if (maxRank > 0) { for (let i = 1; i <= maxRank; i++) { const label = document.createElement('label'); label.textContent = `${i}등:`; const select = document.createElement('select'); select.id = `rank-${i}`; select.innerHTML = `<option value="">--선택--</option>` + players.map(p => `<option value="${p}">${p}</option>`).join(''); select.value = ranksToRestore[i-1] || ''; select.addEventListener('change', updateGameSummary); rankAssignmentEl.appendChild(label); rankAssignmentEl.appendChild(select); } const saveBtn = document.createElement('button'); saveBtn.className = 'save-btn'; saveBtn.style.backgroundColor = '#17a2b8'; saveBtn.style.marginLeft = '10px'; saveBtn.textContent = '실시간저장'; rankAssignmentEl.appendChild(saveBtn); addSaveButtonListeners(); } }
     function updateGameSummary() { let prizeBuyInCount = 0; const playerRows = document.querySelectorAll('.player-row'); playerRows.forEach(row => { prizeBuyInCount += JSON.parse(row.dataset.entries || '[]').length; }); const totalPrize = prizeBuyInCount * 250; totalPrizeForModal = totalPrize; prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); if (customPrizes) { renderCustomPrizes(customPrizes); } else { calculatePrizeDistribution(totalPrize, playerRows.length); } }
     function calculatePrizeDistribution(totalPrize, playerCount) { prizeDistributionBody.innerHTML = ''; prizeDistributionBody.removeAttribute('data-custom-prizes'); const prizeConfig = prizeConfigForCount(playerCount); if (prizeConfig.length > 0) { prizeConfig.forEach(p => { const winnerSelect = document.getElementById(`rank-${p.r}`); const winnerName = winnerSelect ? winnerSelect.value : ''; const prize = Math.round(totalPrize * p.p); prizeDistributionBody.innerHTML += `<tr><td>${p.r}등</td><td>${winnerName || ''}</td> <td>${prize.toLocaleString()} 포인트</td> <td>${(p.p * 100).toFixed(0)}%</td></tr>`; }); } }
     
