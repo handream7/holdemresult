@@ -196,6 +196,7 @@
     const playerSummaryBody = document.getElementById('player-summary-body');
     const rankModal = document.getElementById('rank-modal');
     let totalPrizeForModal = 0;
+    
     let isUpdatingFromFirebase = false; 
     let globalRanks = [];
 
@@ -209,6 +210,7 @@
         document.getElementById('open-rank-modal-btn').addEventListener('click', openRankModal);
         rankModal.addEventListener('click', handleRankModalActions);
         dealerList.addEventListener('click', handleDealerActions);
+        dealerList.addEventListener('change', handleDealerInputs);
         playerList.addEventListener('click', handlePlayerActions);
         playerList.addEventListener('change', handlePlayerInputs);
         prizeModal.addEventListener('click', handleModalActions);
@@ -310,22 +312,47 @@
     function updateGameInfoDisplay() { const date = gameDateEl.value; const dayOfWeek = dayOfWeekEl.textContent; const tournamentText = tournamentSelect.options[tournamentSelect.selectedIndex].text; if (date) { gameInfoDisplayEl.textContent = `${date} ${dayOfWeek} / ${tournamentText}`; } else { gameInfoDisplayEl.textContent = ''; } }
     
     function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
+    
     function addDealerRow(data = {}, doUpdate = true) {
         const row = document.createElement('div'); row.className = 'item-row';
         const hourOptions = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
         const minOptions = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
-        row.innerHTML = `<div class="dealer-line"><strong class="dealer-num"></strong><select class="dealer-name">${createDropdownOptions(DEALER_NAMES, data.name)}</select></div><div class="dealer-line"><strong>시작:</strong> <select class="start-hour">${hourOptions}</select>:<select class="start-minute">${minOptions}</select> <button class="action-btn start-now-btn">NOW</button></div><div class="dealer-line"><strong>마감:</strong> <select class="end-hour">${hourOptions}</select>:<select class="end-minute">${minOptions}</select> <button class="action-btn end-now-btn">NOW</button></div><div class="dealer-line"><button class="action-btn close-btn">계산</button> <button class="delete-btn">삭제</button> <div class="result">${data.resultHTML || ''}</div></div>`;
+        row.innerHTML = `<div class="dealer-line"><strong class="dealer-num"></strong><select class="dealer-name">${createDropdownOptions(DEALER_NAMES, data.name, true)}</select></div><div class="dealer-line"><strong>시작:</strong> <select class="start-hour">${hourOptions}</select>:<select class="start-minute">${minOptions}</select> <button class="action-btn start-now-btn">NOW</button></div><div class="dealer-line"><strong>마감:</strong> <select class="end-hour">${hourOptions}</select>:<select class="end-minute">${minOptions}</select> <button class="action-btn end-now-btn">NOW</button></div><div class="dealer-line"><button class="action-btn close-btn">계산</button> <button class="delete-btn">삭제</button> <div class="result">${data.resultHTML || ''}</div></div>`;
         dealerList.appendChild(row);
         if (data.startHour) row.querySelector('.start-hour').value = data.startHour; if (data.startMinute) row.querySelector('.start-minute').value = data.startMinute;
         if (data.endHour) row.querySelector('.end-hour').value = data.endHour; if (data.endMinute) row.querySelector('.end-minute').value = data.endMinute;
         if (data.isClosed) { row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; }
         if (doUpdate) updateAll();
     }
+
     function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
+    
+    function handleDealerInputs(e) {
+        const target = e.target;
+        const row = target.closest('.item-row');
+        if (!row) return;
+
+        if (target.matches('.dealer-name') && target.value === '__DIRECT_INPUT__') {
+            const customName = prompt('딜러 닉네임을 입력하세요:', '');
+            if (customName && customName.trim() !== '') {
+                const newName = customName.trim();
+                const newOption = new Option(newName, newName);
+                target.add(newOption);
+                target.value = newName;
+                setTimeout(() => updateAll(), 0); 
+            } else {
+                target.value = '';
+                updateAll();
+            }
+        } else {
+            updateAll();
+        }
+    }
+    
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
     
     function resetPrizeAndRanks() {
-        console.log("플레이어 수 변경: 등수 및 상금 정보를 초기화합니다.");
+        console.log("플레이어 수 또는 이름 변경: 등수 및 상금 정보를 초기화합니다.");
         globalRanks = [];
         prizeDistributionBody.removeAttribute('data-custom-prizes');
     }
@@ -376,7 +403,30 @@
         } 
     }
 
-    function handlePlayerInputs(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.player-name')) { if (target.value === '__DIRECT_INPUT__') { const customName = prompt('플레이어 닉네임을 입력하세요:', ''); if (customName && customName.trim() !== '') { const newOption = new Option(customName.trim(), customName.trim(), true, true); target.add(newOption); } else { target.value = ''; } } updateAll(); } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { renderPlayerEntries(row); updateAll(); } }
+    function handlePlayerInputs(e) { 
+        const target = e.target; 
+        const row = target.closest('.player-row'); 
+        if (!row) return; 
+        
+        if (target.matches('.player-name')) { 
+            if (target.value === '__DIRECT_INPUT__') { 
+                const customName = prompt('플레이어 닉네임을 입력하세요:', ''); 
+                if (customName && customName.trim() !== '') { 
+                    const newName = customName.trim();
+                    const newOption = new Option(newName, newName);
+                    target.add(newOption);
+                    target.value = newName;
+                } else { 
+                    target.value = ''; 
+                } 
+            } 
+            resetPrizeAndRanks();
+            updateAll(); 
+        } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { 
+            renderPlayerEntries(row); 
+            updateAll(); 
+        } 
+    }
     
     function updatePlayerSummaryTable() {
         playerSummaryBody.innerHTML = '';
@@ -408,31 +458,26 @@
         }
     }
     
-    // --- 여기부터 수정된(구현된) 함수입니다 ---
     function openRankModal() {
         const editorBody = rankModal.querySelector('#rank-editor-table tbody');
-        editorBody.innerHTML = ''; // 기존 팝업 내용 초기화
+        editorBody.innerHTML = ''; 
 
-        // 이름이 지정된 현재 플레이어 목록 가져오기
         const players = Array.from(document.querySelectorAll('#player-list .player-name'))
                              .map(select => select.value)
                              .filter(name => name);
         const playerCount = players.length;
 
-        // 플레이어 수에 따라 상금 구조 결정
         const prizeConfig = prizeConfigForCount(playerCount);
 
-        // 시상 가능한 최소 인원(5명)이 안 되면 알림 후 종료
         if (prizeConfig.length === 0) {
             alert("플레이어 수가 5명 미만이라 등수를 지정할 수 없습니다.");
             return;
         }
 
-        // 결정된 등수만큼 팝업창에 행을 추가
         prizeConfig.forEach((config, index) => {
-            const rankText = `${config.r}등`; // "1등", "2등" 등
+            const rankText = `${config.r}등`; 
             const prizeAmount = Math.round(totalPrizeForModal * config.p);
-            const previouslySelectedPlayer = globalRanks[index] || ''; // 이전에 지정한 플레이어가 있다면 복원
+            const previouslySelectedPlayer = globalRanks[index] || ''; 
             
             addRankEditorRow({
                 rank: rankText,
@@ -441,9 +486,8 @@
             }, players);
         });
 
-        rankModal.style.display = 'flex'; // 수정된 내용으로 팝업창을 보여줌
+        rankModal.style.display = 'flex';
     }
-    // --- 여기까지 수정된(구현된) 함수입니다 ---
 
     function addRankEditorRow(data = {}, players) {
         const editorBody = rankModal.querySelector('#rank-editor-table tbody');
