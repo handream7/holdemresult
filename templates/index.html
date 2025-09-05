@@ -315,7 +315,32 @@
         if (doUpdate) updateAll();
     }
     function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
-    function handlePlayerActions(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.add-entry-btn')) { const entries = JSON.parse(row.dataset.entries); entries.push(row.querySelector('.entry-type').value); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); prizeDistributionBody.removeAttribute('data-custom-prizes'); document.querySelectorAll('#rank-assignment select').forEach(select => select.value = ''); updateAll(); } else if (target.matches('.delete-btn')) { const entries = JSON.parse(row.dataset.entries); if (entries.length > 0) { entries.pop(); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); } else { row.remove(); } prizeDistributionBody.removeAttribute('data-custom-prizes'); document.querySelectorAll('#rank-assignment select').forEach(select => select.value = ''); updateAll(); } }
+    function handlePlayerActions(e) {
+        const target = e.target; const row = target.closest('.player-row'); if (!row) return;
+        let prizeShouldReset = false;
+        if (target.matches('.add-entry-btn')) {
+            const entries = JSON.parse(row.dataset.entries);
+            entries.push(row.querySelector('.entry-type').value);
+            row.dataset.entries = JSON.stringify(entries);
+            renderPlayerEntries(row);
+            prizeShouldReset = true;
+        } else if (target.matches('.delete-btn')) {
+            const entries = JSON.parse(row.dataset.entries);
+            if (entries.length > 0) {
+                entries.pop();
+                row.dataset.entries = JSON.stringify(entries);
+                renderPlayerEntries(row);
+            } else {
+                row.remove();
+            }
+            prizeShouldReset = true;
+        }
+        if (prizeShouldReset) {
+            prizeDistributionBody.removeAttribute('data-custom-prizes');
+            document.querySelectorAll('#rank-assignment select').forEach(select => select.value = '');
+        }
+        updateAll();
+    }
     function handlePlayerInputs(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.player-name')) { if (target.value === '__DIRECT_INPUT__') { const customName = prompt('플레이어 닉네임을 입력하세요:', ''); if (customName && customName.trim() !== '') { const newOption = new Option(customName.trim(), customName.trim(), true, true); target.add(newOption); } else { target.value = ''; } } updateAll(); } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { renderPlayerEntries(row); updateAll(); } }
     
     function updatePlayerSummaryTable() {
@@ -337,7 +362,7 @@
     
     function updateWinnerSelectionDropdowns(ranksToRestore = []) { const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name); const maxRank = Math.min(5, prizeConfigForCount(players.length).length); rankAssignmentEl.innerHTML = ''; if (maxRank > 0) { for (let i = 1; i <= maxRank; i++) { const label = document.createElement('label'); label.textContent = `${i}등:`; const select = document.createElement('select'); select.id = `rank-${i}`; select.innerHTML = `<option value="">--선택--</option>` + players.map(p => `<option value="${p}">${p}</option>`).join(''); select.value = ranksToRestore[i-1] || ''; select.addEventListener('change', updateAll); rankAssignmentEl.appendChild(label); rankAssignmentEl.appendChild(select); } } }
     function updateGameSummary() { let prizeBuyInCount = 0; const playerRows = document.querySelectorAll('.player-row'); playerRows.forEach(row => { prizeBuyInCount += JSON.parse(row.dataset.entries || '[]').length; }); const totalPrize = prizeBuyInCount * 250; totalPrizeForModal = totalPrize; prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); if (customPrizes) { renderCustomPrizes(customPrizes); } else { calculatePrizeDistribution(totalPrize, playerRows.length); } }
-    function calculatePrizeDistribution(totalPrize, playerCount) { prizeDistributionBody.innerHTML = ''; prizeDistributionBody.removeAttribute('data-custom-prizes'); const prizeConfig = prizeConfigForCount(playerCount); if (prizeConfig.length > 0) { prizeConfig.forEach(p => { const winnerSelect = document.getElementById(`rank-${p.r}`); const winnerName = winnerSelect ? winnerSelect.value : ''; const prize = Math.round(totalPrize * p.p); prizeDistributionBody.innerHTML += `<tr><td>${p.r}등</td><td>${winnerName || ''}</td> <td>${prize.toLocaleString()} 포인트</td> <td>${(p.p * 100).toFixed(0)}%</td></tr>`; }); } }
+    function calculatePrizeDistribution(totalPrize, playerCount) { prizeDistributionBody.innerHTML = ''; const prizeConfig = prizeConfigForCount(playerCount); if (prizeConfig.length > 0) { prizeConfig.forEach(p => { const winnerSelect = document.getElementById(`rank-${p.r}`); const winnerName = winnerSelect ? winnerSelect.value : ''; const prize = Math.round(totalPrize * p.p); prizeDistributionBody.innerHTML += `<tr><td>${p.r}등</td><td>${winnerName || ''}</td> <td>${prize.toLocaleString()} 포인트</td> <td>${(p.p * 100).toFixed(0)}%</td></tr>`; }); } }
     
     function openPrizeModal() { const prizeRows = prizeDistributionBody.querySelectorAll('tr'); const editorBody = prizeModal.querySelector('#prize-editor-table tbody'); editorBody.innerHTML = ''; const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(Boolean); if (prizeRows.length > 0) { prizeRows.forEach(row => { const rankText = row.cells[0].textContent; const winnerName = row.cells[1].textContent; const prizeText = row.cells[2].textContent.replace(/[^0-9]/g, ''); addPrizeEditorRow({ rank: rankText, player: winnerName, prize: prizeText }, players); }); } else { addPrizeEditorRow({rank: '1등'}, players); } document.getElementById('modal-total-prize').textContent = totalPrizeForModal.toLocaleString(); updateModalSum(); prizeModal.style.display = 'flex'; }
     function addPrizeEditorRow(data = {}, players) { const editorBody = prizeModal.querySelector('#prize-editor-table tbody'); const tr = document.createElement('tr'); const playerOptions = createDropdownOptions(players, data.player); tr.innerHTML = `<td><input type="text" class="modal-rank" value="${data.rank || (editorBody.rows.length + 1) + '등'}" style="width:50px;"></td><td><select class="modal-player">${playerOptions}</select></td><td><input type="number" class="modal-prize" value="${data.prize || 0}"></td><td><button type="button" class="delete-btn modal-delete-rank">X</button></td>`; editorBody.appendChild(tr); }
