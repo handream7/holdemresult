@@ -324,7 +324,14 @@
     function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
     
+    function resetPrizeAndRanks() {
+        console.log("플레이어 수 변경: 등수 및 상금 정보를 초기화합니다.");
+        globalRanks = [];
+        prizeDistributionBody.removeAttribute('data-custom-prizes');
+    }
+
     function renumberPlayers() { document.querySelectorAll('#player-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.player-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'player-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
+    
     function addPlayerRow(data = {}, doUpdate = true) {
         const row = document.createElement('div'); row.className = 'item-row player-row';
         row.dataset.entries = JSON.stringify(data.entries || []);
@@ -334,10 +341,41 @@
         playerList.appendChild(row);
         if (data.name) { row.querySelector('.player-name').value = data.name; }
         renderPlayerEntries(row);
-        if (doUpdate) updateAll();
+        
+        if (doUpdate) {
+            resetPrizeAndRanks();
+            updateAll();
+        }
     }
+
     function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
-    function handlePlayerActions(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.add-entry-btn')) { const entries = JSON.parse(row.dataset.entries); entries.push(row.querySelector('.entry-type').value); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); updateAll(); } else if (target.matches('.delete-btn')) { const entries = JSON.parse(row.dataset.entries); if (entries.length > 0) { entries.pop(); row.dataset.entries = JSON.stringify(entries); renderPlayerEntries(row); } else { row.remove(); } updateAll(); } }
+    
+    function handlePlayerActions(e) { 
+        const target = e.target; 
+        const row = target.closest('.player-row'); 
+        if (!row) return; 
+
+        if (target.matches('.add-entry-btn')) { 
+            const entries = JSON.parse(row.dataset.entries); 
+            entries.push(row.querySelector('.entry-type').value); 
+            row.dataset.entries = JSON.stringify(entries); 
+            renderPlayerEntries(row); 
+            updateAll(); 
+        } else if (target.matches('.delete-btn')) { 
+            const entries = JSON.parse(row.dataset.entries); 
+            if (entries.length > 0) { 
+                entries.pop(); 
+                row.dataset.entries = JSON.stringify(entries); 
+                renderPlayerEntries(row); 
+                updateAll();
+            } else { 
+                row.remove(); 
+                resetPrizeAndRanks();
+                updateAll();
+            } 
+        } 
+    }
+
     function handlePlayerInputs(e) { const target = e.target; const row = target.closest('.player-row'); if (!row) return; if (target.matches('.player-name')) { if (target.value === '__DIRECT_INPUT__') { const customName = prompt('플레이어 닉네임을 입력하세요:', ''); if (customName && customName.trim() !== '') { const newOption = new Option(customName.trim(), customName.trim(), true, true); target.add(newOption); } else { target.value = ''; } } updateAll(); } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { renderPlayerEntries(row); updateAll(); } }
     
     function updatePlayerSummaryTable() {
@@ -357,7 +395,6 @@
         });
     }
     
-    function updateWinnerSelectionDropdowns(ranksToRestore = []) { /* 이 함수는 이제 사용하지 않습니다. */ }
     function updateGameSummary() { let prizeBuyInCount = 0; const playerRows = document.querySelectorAll('.player-row'); playerRows.forEach(row => { prizeBuyInCount += JSON.parse(row.dataset.entries || '[]').length; }); const totalPrize = prizeBuyInCount * 250; totalPrizeForModal = totalPrize; prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); if (customPrizes) { renderCustomPrizes(customPrizes); } else { calculatePrizeDistribution(totalPrize, playerRows.length); } }
     function calculatePrizeDistribution(totalPrize, playerCount) {
         prizeDistributionBody.innerHTML = '';
@@ -371,23 +408,43 @@
         }
     }
     
+    // --- 여기부터 수정된(구현된) 함수입니다 ---
     function openRankModal() {
         const editorBody = rankModal.querySelector('#rank-editor-table tbody');
-        editorBody.innerHTML = '';
-        const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
-        const prizeConfig = prizeConfigForCount(players.length);
+        editorBody.innerHTML = ''; // 기존 팝업 내용 초기화
+
+        // 이름이 지정된 현재 플레이어 목록 가져오기
+        const players = Array.from(document.querySelectorAll('#player-list .player-name'))
+                             .map(select => select.value)
+                             .filter(name => name);
+        const playerCount = players.length;
+
+        // 플레이어 수에 따라 상금 구조 결정
+        const prizeConfig = prizeConfigForCount(playerCount);
+
+        // 시상 가능한 최소 인원(5명)이 안 되면 알림 후 종료
         if (prizeConfig.length === 0) {
-            alert("플레이어 수가 부족하여 등수를 지정할 수 없습니다.");
+            alert("플레이어 수가 5명 미만이라 등수를 지정할 수 없습니다.");
             return;
         }
-        prizeConfig.forEach((p, index) => {
-            const rank = index + 1;
-            const prize = Math.round(totalPrizeForModal * p.p);
-            const selectedPlayer = globalRanks[index] || '';
-            addRankEditorRow({ rank: `${rank}등`, player: selectedPlayer, prize: prize }, players);
+
+        // 결정된 등수만큼 팝업창에 행을 추가
+        prizeConfig.forEach((config, index) => {
+            const rankText = `${config.r}등`; // "1등", "2등" 등
+            const prizeAmount = Math.round(totalPrizeForModal * config.p);
+            const previouslySelectedPlayer = globalRanks[index] || ''; // 이전에 지정한 플레이어가 있다면 복원
+            
+            addRankEditorRow({
+                rank: rankText,
+                player: previouslySelectedPlayer,
+                prize: prizeAmount
+            }, players);
         });
-        rankModal.style.display = 'flex';
+
+        rankModal.style.display = 'flex'; // 수정된 내용으로 팝업창을 보여줌
     }
+    // --- 여기까지 수정된(구현된) 함수입니다 ---
+
     function addRankEditorRow(data = {}, players) {
         const editorBody = rankModal.querySelector('#rank-editor-table tbody');
         const tr = document.createElement('tr');
@@ -404,21 +461,114 @@
             rankModal.style.display = 'none';
         } else if (target.matches('#rank-modal-save-btn')) {
             const selectedRanks = [];
+            const selectedPlayers = new Set();
+            let isDuplicate = false;
             rankModal.querySelectorAll('.modal-player').forEach(select => {
-                selectedRanks.push(select.value);
+                const player = select.value;
+                if(player && selectedPlayers.has(player)){
+                    isDuplicate = true;
+                }
+                if(player) {
+                    selectedPlayers.add(player);
+                }
+                selectedRanks.push(player);
             });
+
+            if(isDuplicate){
+                alert('중복된 플레이어가 있습니다. 다시 확인해주세요.');
+                return;
+            }
+
             globalRanks = selectedRanks;
             rankModal.style.display = 'none';
             updateAll();
         }
     }
 
-    function openPrizeModal() { /* 생략 */ }
-    function addPrizeEditorRow(data = {}, players) { /* 생략 */ }
-    function handleModalActions(e) { /* 생략 */ }
-    function updateModalSum() { /* 생략 */ }
-    function handleModalInputs(e) { /* 생략 */ }
-    function renderCustomPrizes(customPrizes) { /* 생략 */ }
+    function openPrizeModal() {
+        const editorBody = prizeModal.querySelector('#prize-editor-table tbody');
+        editorBody.innerHTML = '';
+        const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
+        const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null');
+        
+        document.getElementById('modal-total-prize').textContent = totalPrizeForModal.toLocaleString();
+        
+        if (customPrizes) {
+            customPrizes.forEach(prize => addPrizeEditorRow(prize, players));
+        } else {
+            const prizeConfig = prizeConfigForCount(players.length);
+            prizeConfig.forEach((p, index) => {
+                const prize = Math.round(totalPrizeForModal * p.p);
+                addPrizeEditorRow({ rank: `${p.r}등`, player: globalRanks[index] || '', prize: prize }, players);
+            });
+        }
+        
+        updateModalSum();
+        prizeModal.style.display = 'flex';
+    }
+    function addPrizeEditorRow(data = {}, players) {
+        const editorBody = prizeModal.querySelector('#prize-editor-table tbody');
+        const tr = document.createElement('tr');
+        const playerOptions = createDropdownOptions(players, data.player);
+        tr.innerHTML = `
+            <td><input type="text" class="modal-rank" value="${data.rank || ''}" placeholder="예: 1등"></td>
+            <td><select class="modal-player">${playerOptions}</select></td>
+            <td><input type="number" class="modal-prize" value="${data.prize || 0}"></td>
+            <td><button type="button" class="delete-btn">X</button></td>`;
+        editorBody.appendChild(tr);
+    }
+    function handleModalActions(e) {
+        const target = e.target;
+        if (target.matches('#prize-modal-close-btn') || !target.closest('.modal-content')) {
+            prizeModal.style.display = 'none';
+        } else if (target.matches('#prize-modal-save-btn')) {
+            const currentSum = parseInt(document.getElementById('modal-current-sum').textContent.replace(/,/g, ''));
+            if (currentSum !== totalPrizeForModal) {
+                alert(`상금 합계(${currentSum.toLocaleString()})가 총상금(${totalPrizeForModal.toLocaleString()})과 일치하지 않습니다.`);
+                return;
+            }
+            const newCustomPrizes = Array.from(prizeModal.querySelectorAll('#prize-editor-table tbody tr')).map(tr => ({
+                rank: tr.querySelector('.modal-rank').value,
+                player: tr.querySelector('.modal-player').value,
+                prize: parseInt(tr.querySelector('.modal-prize').value) || 0,
+            }));
+            prizeDistributionBody.dataset.customPrizes = JSON.stringify(newCustomPrizes);
+            prizeModal.style.display = 'none';
+            updateAll();
+        } else if (target.matches('#add-rank-btn')) {
+            const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
+            addPrizeEditorRow({}, players);
+        } else if (target.matches('.delete-btn')) {
+            target.closest('tr').remove();
+            updateModalSum();
+        }
+    }
+    function updateModalSum() {
+        const sum = Array.from(prizeModal.querySelectorAll('.modal-prize'))
+            .reduce((total, input) => total + (parseInt(input.value) || 0), 0);
+        const currentSumEl = document.getElementById('modal-current-sum');
+        currentSumEl.textContent = sum.toLocaleString();
+        if (sum !== totalPrizeForModal) {
+            currentSumEl.style.color = 'red';
+        } else {
+            currentSumEl.style.color = 'green';
+        }
+    }
+    function handleModalInputs(e) {
+        if (e.target.matches('.modal-prize')) {
+            updateModalSum();
+        }
+    }
+    function renderCustomPrizes(customPrizes) {
+        prizeDistributionBody.innerHTML = '';
+        if(customPrizes && customPrizes.length > 0) {
+            customPrizes.forEach(p => {
+                const totalPrize = totalPrizeForModal;
+                const percentage = totalPrize > 0 ? ((p.prize / totalPrize) * 100).toFixed(0) + '%' : '0%';
+                prizeDistributionBody.innerHTML += `<tr><td>${p.rank}</td><td>${p.player}</td> <td>${p.prize.toLocaleString()} 포인트</td> <td>${percentage}</td></tr>`;
+            });
+        }
+    }
     
     function createDropdownOptions(names, selectedValue, withDirectInputOption = false) { let optionsHtml = ''; if (withDirectInputOption) { optionsHtml += `<option value="__DIRECT_INPUT__">-- 직접입력 --</option>`; } optionsHtml += names.map(name => `<option value="${name}" ${name === selectedValue ? 'selected' : ''}>${name}</option>`).join(''); return `<option value="">--선택--</option>` + optionsHtml; }
     function prizeConfigForCount(count) { if (count >= 5 && count <= 7) return [{ r: 1, p: 0.65 }, { r: 2, p: 0.35 }]; if (count >= 8 && count <= 11) return [{ r: 1, p: 0.60 }, { r: 2, p: 0.30 }, { r: 3, p: 0.10 }]; if (count >= 12 && count <= 17) return [{ r: 1, p: 0.50 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }]; if (count >= 18 && count <= 35) return [{ r: 1, p: 0.45 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }, { r: 5, p: 0.05 }]; return []; }
