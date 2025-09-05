@@ -35,6 +35,9 @@
         #prize-editor-table input, #rank-editor-table input { width: 100px; text-align: right; }
         #prize-editor-table select, #rank-editor-table select { width: 120px; }
         #game-info-display { font-size: 1.1em; font-weight: bold; margin-bottom: 15px; color: #4a4a4a; border-bottom: 1px solid #e0e0e0; padding-bottom: 8px; }
+        #archived-games-list .game-item { padding: 10px; border: 1px solid #eee; margin-top: -1px; cursor: pointer; }
+        #archived-games-list .game-item:hover { background-color: #f0f0f0; }
+        #archived-games-list .game-item.selected { background-color: #007bff; color: white; border-color: #007bff; }
 
         @media (max-width: 768px) {
             .container { padding: 10px; }
@@ -127,6 +130,7 @@
 </div>
 <div class="container" style="margin-top:20px; text-align: right;">
     <button id="new-game-btn" style="background-color: #fd7e14;">새로운 정산 시작</button>
+    <button id="load-game-btn" style="background-color: #17a2b8;">이전 게임 불러오기</button>
 </div>
 
 <div id="prize-modal" class="modal-overlay">
@@ -159,12 +163,24 @@
     </div>
 </div>
 
+<div id="load-game-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>이전 게임 불러오기</h3>
+        <div id="archived-games-list">불러오는 중...</div>
+        <div class="modal-actions">
+            <button id="load-game-close-btn" type="button" style="background-color: #6c757d;">취소</button>
+            <button id="load-game-confirm-btn" type="button">확인</button>
+        </div>
+    </div>
+</div>
+
+
 <datalist id="dealer-names-list">{% for name in dealers %}<option value="{{ name }}">{% endfor %}</datalist>
 <datalist id="player-names-list">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, orderBy, getDocs, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDxwPHSfIlcCii9RLBG9vhwQj2mhjzj3B8",
@@ -195,6 +211,7 @@
     const gameInfoDisplayEl = document.getElementById('game-info-display');
     const playerSummaryBody = document.getElementById('player-summary-body');
     const rankModal = document.getElementById('rank-modal');
+    const loadGameModal = document.getElementById('load-game-modal');
     let totalPrizeForModal = 0;
     
     let isUpdatingFromFirebase = false; 
@@ -208,7 +225,9 @@
         document.getElementById('game-end-btn').addEventListener('click', endGameAndCapture);
         document.getElementById('edit-prize-btn').addEventListener('click', openPrizeModal);
         document.getElementById('open-rank-modal-btn').addEventListener('click', openRankModal);
+        document.getElementById('load-game-btn').addEventListener('click', openLoadGameModal);
         rankModal.addEventListener('click', handleRankModalActions);
+        loadGameModal.addEventListener('click', handleLoadGameModalActions);
         dealerList.addEventListener('click', handleDealerActions);
         dealerList.addEventListener('change', handleDealerInputs);
         playerList.addEventListener('click', handlePlayerActions);
@@ -290,13 +309,37 @@
     }
     
     async function startNewGame() {
-        if (confirm('정말로 모든 기록을 지우고 처음부터 시작하시겠습니까? 저장된 데이터도 삭제됩니다.')) {
+        if (confirm('새로운 게임을 시작하시겠습니까?')) {
             try {
-                const emptyState = { date: new Date().toISOString().slice(0, 10), tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
-                await setDoc(doc(db, "gameStates", "latestState"), emptyState);
-            } catch (error) { console.error("데이터 리셋 오류:", error); alert("리셋에 실패했습니다."); }
+                const latestStateRef = doc(db, "gameStates", "latestState");
+                const docSnap = await getDoc(latestStateRef);
+
+                if (docSnap.exists()) {
+                    const currentStateData = docSnap.data();
+                    if (currentStateData.players && currentStateData.players.length > 0) {
+                        const now = new Date();
+                        const datePart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                        const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+                        const archiveId = `${datePart}_${timePart}`;
+
+                        const archiveRef = doc(db, "archivedGames", archiveId);
+                        await setDoc(archiveRef, currentStateData);
+                        console.log(`기존 게임이 ${archiveId}로 보관되었습니다.`);
+                    }
+                }
+
+                const today = new Date();
+                const newGameDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
+                await setDoc(latestStateRef, emptyState);
+                
+            } catch (error) {
+                console.error("새 게임 시작 오류:", error);
+                alert("새 게임을 시작하는 데 실패했습니다.");
+            }
         }
     }
+
     function resetUI(doUpdate = true) {
         dealerList.innerHTML = '';
         playerList.innerHTML = '';
@@ -332,19 +375,20 @@
         const row = target.closest('.item-row');
         if (!row) return;
 
-        if (target.matches('.dealer-name') && target.value === '__DIRECT_INPUT__') {
-            const customName = prompt('딜러 닉네임을 입력하세요:', '');
-            if (customName && customName.trim() !== '') {
-                const newName = customName.trim();
-                const newOption = new Option(newName, newName);
-                target.add(newOption);
-                target.value = newName;
-                setTimeout(() => updateAll(), 0); 
-            } else {
-                target.value = '';
-                updateAll();
+        if (target.matches('.dealer-name')) {
+            if (target.value === '__DIRECT_INPUT__') {
+                const customName = prompt('딜러 닉네임을 입력하세요:', '');
+                if (customName && customName.trim() !== '') {
+                    const newName = customName.trim();
+                    const newOption = new Option(newName, newName);
+                    target.add(newOption);
+                    target.value = newName;
+                } else {
+                    target.value = '';
+                }
             }
-        } else {
+            updateAll();
+        } else if (target.matches('.start-hour, .start-minute, .end-hour, .end-minute')) {
             updateAll();
         }
     }
@@ -611,6 +655,86 @@
                 const percentage = totalPrize > 0 ? ((p.prize / totalPrize) * 100).toFixed(0) + '%' : '0%';
                 prizeDistributionBody.innerHTML += `<tr><td>${p.rank}</td><td>${p.player}</td> <td>${p.prize.toLocaleString()} 포인트</td> <td>${percentage}</td></tr>`;
             });
+        }
+    }
+    
+    // --- 여기부터 수정된(구현된) 코드입니다 ---
+    async function openLoadGameModal() {
+        const listEl = document.getElementById('archived-games-list');
+        listEl.innerHTML = '불러오는 중...';
+        loadGameModal.style.display = 'flex';
+
+        try {
+            // Firebase 대신 브라우저에서 직접 정렬하기 위해 query 수정
+            const gamesCollectionRef = collection(db, "archivedGames");
+            const querySnapshot = await getDocs(gamesCollectionRef);
+            
+            listEl.innerHTML = '';
+            if (querySnapshot.empty) {
+                listEl.innerHTML = '보관된 게임이 없습니다.';
+                return;
+            }
+            
+            // 1. 가져온 데이터를 배열로 변환
+            const games = [];
+            querySnapshot.forEach(doc => {
+                games.push({ id: doc.id, data: doc.data() });
+            });
+
+            // 2. 배열을 ID(날짜/시간) 기준으로 최신순 정렬
+            games.sort((a, b) => b.id.localeCompare(a.id));
+
+            // 3. 정렬된 배열을 기반으로 목록 생성
+            games.forEach(game => {
+                const gameData = game.data;
+                const playerCount = gameData.players ? gameData.players.length : 0;
+                const item = document.createElement('div');
+                item.className = 'game-item';
+                item.textContent = `[${game.id.replace('_', ' ')}] - 플레이어: ${playerCount}명`;
+                item.dataset.id = game.id;
+                listEl.appendChild(item);
+            });
+
+        } catch(error) {
+            console.error("보관된 게임 불러오기 실패:", error);
+            listEl.innerHTML = '게임을 불러오는 데 실패했습니다.';
+        }
+    }
+    // --- 여기까지 수정된(구현된) 코드입니다 ---
+    
+    async function handleLoadGameModalActions(e) {
+        const target = e.target;
+        const listEl = document.getElementById('archived-games-list');
+
+        if(target.matches('.game-item')) {
+            listEl.querySelectorAll('.game-item').forEach(el => el.classList.remove('selected'));
+            target.classList.add('selected');
+        } else if (target.matches('#load-game-close-btn') || !target.closest('.modal-content')) {
+            loadGameModal.style.display = 'none';
+        } else if (target.matches('#load-game-confirm-btn')) {
+            const selectedItem = listEl.querySelector('.game-item.selected');
+            if (!selectedItem) {
+                alert('불러올 게임을 선택하세요.');
+                return;
+            }
+
+            const gameId = selectedItem.dataset.id;
+            try {
+                const archiveDocRef = doc(db, "archivedGames", gameId);
+                const docSnap = await getDoc(archiveDocRef);
+
+                if (docSnap.exists()) {
+                    const gameDataToLoad = docSnap.data();
+                    const latestStateRef = doc(db, "gameStates", "latestState");
+                    await setDoc(latestStateRef, gameDataToLoad);
+                    loadGameModal.style.display = 'none';
+                } else {
+                    alert('선택한 게임 데이터를 찾을 수 없습니다.');
+                }
+            } catch(error) {
+                console.error("게임 불러오기 실패:", error);
+                alert('게임을 불러오는 데 실패했습니다.');
+            }
         }
     }
     
