@@ -298,7 +298,7 @@
         (state.players || []).forEach(data => addPlayerRow(data, false));
         if (state.customPrizes) { prizeDistributionBody.dataset.customPrizes = JSON.stringify(state.customPrizes); }
         globalRanks = state.ranks || [];
-        updateAll(false); // 복원 시에는 다시 저장하지 않음
+        updateAll(false);
     }
     
     function updateAll(doSave = true) {
@@ -315,15 +315,16 @@
     
     async function saveGameArchive() {
         const stateToArchive = getCurrentState();
-        if (stateToArchive.players.length === 0) {
-            alert("플레이어가 없어 저장할 수 없습니다.");
+        if (stateToArchive.players.length === 0 && stateToArchive.dealers.length === 0) {
+            alert("플레이어나 딜러 정보가 없어 저장할 수 없습니다.");
             return;
         }
 
         const now = new Date();
-        const datePart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-        const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
-        const archiveId = `${datePart}_${timePart}`;
+        const datePart = stateToArchive.date;
+        const tourneyPart = tournamentSelect.options[tournamentSelect.selectedIndex].text;
+        const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0');
+        const archiveId = `${datePart} [${tourneyPart}] ${timePart}`;
 
         try {
             const archiveRef = doc(db, "archivedGames", archiveId);
@@ -342,9 +343,7 @@
             const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
             
             try {
-                // 실시간 작업 문서를 빈 상태로 덮어쓰기
                 await setDoc(doc(db, "gameStates", "latestState"), emptyState);
-                // onSnapshot이 변경을 감지하고 자동으로 화면을 리셋할 것입니다.
             } catch (error) {
                 console.error("새 게임 시작 오류:", error);
                 alert("새 게임을 시작하는 데 실패했습니다.");
@@ -368,17 +367,26 @@
     
     function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
     
+    // --- 여기부터 수정된(구현된) 함수입니다 ---
     function addDealerRow(data = {}, doUpdate = true) {
         const row = document.createElement('div'); row.className = 'item-row';
         const hourOptions = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
         const minOptions = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
-        row.innerHTML = `<div class="dealer-line"><strong class="dealer-num"></strong><select class="dealer-name">${createDropdownOptions(DEALER_NAMES, data.name, true)}</select></div><div class="dealer-line"><strong>시작:</strong> <select class="start-hour">${hourOptions}</select>:<select class="start-minute">${minOptions}</select> <button class="action-btn start-now-btn">NOW</button></div><div class="dealer-line"><strong>마감:</strong> <select class="end-hour">${hourOptions}</select>:<select class="end-minute">${minOptions}</select> <button class="action-btn end-now-btn">NOW</button></div><div class="dealer-line"><button class="action-btn close-btn">계산</button> <button class="delete-btn">삭제</button> <div class="result">${data.resultHTML || ''}</div></div>`;
+        
+        let dealerOptionsHTML = createDropdownOptions(DEALER_NAMES, data.name, true);
+        // 저장된 데이터(data.name)가 기본 목록(DEALER_NAMES)에 없으면, 수동으로 option 태그를 추가
+        if (data.name && !DEALER_NAMES.includes(data.name)) {
+            dealerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
+        }
+
+        row.innerHTML = `<div class="dealer-line"><strong class="dealer-num"></strong><select class="dealer-name">${dealerOptionsHTML}</select></div><div class="dealer-line"><strong>시작:</strong> <select class="start-hour">${hourOptions}</select>:<select class="start-minute">${minOptions}</select> <button class="action-btn start-now-btn">NOW</button></div><div class="dealer-line"><strong>마감:</strong> <select class="end-hour">${hourOptions}</select>:<select class="end-minute">${minOptions}</select> <button class="action-btn end-now-btn">NOW</button></div><div class="dealer-line"><button class="action-btn close-btn">계산</button> <button class="delete-btn">삭제</button> <div class="result">${data.resultHTML || ''}</div></div>`;
         dealerList.appendChild(row);
         if (data.startHour) row.querySelector('.start-hour').value = data.startHour; if (data.startMinute) row.querySelector('.start-minute').value = data.startMinute;
         if (data.endHour) row.querySelector('.end-hour').value = data.endHour; if (data.endMinute) row.querySelector('.end-minute').value = data.endMinute;
         if (data.isClosed) { row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; }
         if (doUpdate) updateAll();
     }
+    // --- 여기까지 수정된(구현된) 함수입니다 ---
 
     function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
     
@@ -399,8 +407,10 @@
                     target.value = '';
                 }
             }
+            updateAll();
+        } else if (target.matches('.start-hour, .start-minute, .end-hour, .end-minute')) {
+            updateAll();
         }
-        updateAll();
     }
     
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
@@ -417,7 +427,9 @@
         const row = document.createElement('div'); row.className = 'item-row player-row';
         row.dataset.entries = JSON.stringify(data.entries || []);
         let playerOptionsHTML = createDropdownOptions(PLAYER_NAMES, data.name, true);
-        if (data.name && !PLAYER_NAMES.includes(data.name)) { playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`; }
+        if (data.name && !PLAYER_NAMES.includes(data.name)) {
+            playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
+        }
         row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptionsHTML}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
         playerList.appendChild(row);
         if (data.name) { row.querySelector('.player-name').value = data.name; }
@@ -695,7 +707,7 @@
                 const playerCount = gameData.players ? gameData.players.length : 0;
                 const item = document.createElement('div');
                 item.className = 'game-item';
-                item.textContent = `[${game.id.replace('_', ' ')}] - 플레이어: ${playerCount}명`;
+                item.textContent = `[${game.id}] - 플레이어: ${playerCount}명`;
                 item.dataset.id = game.id;
                 listEl.appendChild(item);
             });
