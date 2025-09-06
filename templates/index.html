@@ -129,6 +129,7 @@
 
 </div>
 <div class="container" style="margin-top:20px; text-align: right;">
+    <button id="save-game-btn" style="background-color: #28a745;">저장</button>
     <button id="load-game-btn" style="background-color: #17a2b8;">이전 게임 불러오기</button>
     <button id="new-game-btn" style="background-color: #fd7e14;">새로운 정산 시작</button>
 </div>
@@ -226,6 +227,7 @@
         document.getElementById('edit-prize-btn').addEventListener('click', openPrizeModal);
         document.getElementById('open-rank-modal-btn').addEventListener('click', openRankModal);
         document.getElementById('load-game-btn').addEventListener('click', openLoadGameModal);
+        document.getElementById('save-game-btn').addEventListener('click', saveGameArchive);
         rankModal.addEventListener('click', handleRankModalActions);
         loadGameModal.addEventListener('click', handleLoadGameModalActions);
         dealerList.addEventListener('click', handleDealerActions);
@@ -234,7 +236,7 @@
         playerList.addEventListener('change', handlePlayerInputs);
         prizeModal.addEventListener('click', handleModalActions);
         prizeModal.addEventListener('input', handleModalInputs);
-        gameDateEl.addEventListener('change', updateDayOfWeek);
+        gameDateEl.addEventListener('change', () => { updateDayOfWeek(); updateAll(); });
         tournamentSelect.addEventListener('change', updateAll);
     }
     
@@ -267,22 +269,25 @@
         const state = getCurrentState();
         try {
             await setDoc(doc(db, "gameStates", "latestState"), state);
-            console.log("데이터가 성공적으로 자동 저장되었습니다.");
+            console.log("실시간 데이터가 자동 저장되었습니다.");
         } catch (error) {
-            console.error("Firebase 저장 실패! 상세 오류:", error);
+            console.error("Firebase 실시간 저장 실패! 상세 오류:", error);
         }
     }
     
     function getCurrentState() {
+        const tourneyText = tournamentSelect.options[tournamentSelect.selectedIndex].text;
         return {
             date: gameDateEl.value,
             tournamentId: tournamentSelect.value,
+            gameTitle: `${gameDateEl.value} / ${tourneyText}`,
             dealers: Array.from(document.querySelectorAll('#dealer-list .item-row')).map(row => ({ name: row.querySelector('.dealer-name').value, startHour: row.querySelector('.start-hour').value, startMinute: row.querySelector('.start-minute').value, endHour: row.querySelector('.end-hour').value, endMinute: row.querySelector('.end-minute').value, resultHTML: row.querySelector('.result').innerHTML, isClosed: row.querySelector('.close-btn').disabled, })),
             players: Array.from(document.querySelectorAll('#player-list .item-row')).map(row => ({ name: row.querySelector('.player-name').value, entryFee: row.querySelector('.entry-fee').checked, earlyBird: row.querySelector('.early-bird').checked, entries: JSON.parse(row.dataset.entries || '[]'), })),
             ranks: globalRanks,
             customPrizes: JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'),
         };
     }
+
     function restoreState(state) {
         dealerList.innerHTML = '';
         playerList.innerHTML = '';
@@ -293,10 +298,10 @@
         (state.players || []).forEach(data => addPlayerRow(data, false));
         if (state.customPrizes) { prizeDistributionBody.dataset.customPrizes = JSON.stringify(state.customPrizes); }
         globalRanks = state.ranks || [];
-        updateAll(null, false);
+        updateAll(false); // 복원 시에는 다시 저장하지 않음
     }
     
-    function updateAll(ranksToRestore = [], doSave = true) {
+    function updateAll(doSave = true) {
         renumberDealers();
         renumberPlayers();
         updateGameSummary();
@@ -308,31 +313,38 @@
         }
     }
     
+    async function saveGameArchive() {
+        const stateToArchive = getCurrentState();
+        if (stateToArchive.players.length === 0) {
+            alert("플레이어가 없어 저장할 수 없습니다.");
+            return;
+        }
+
+        const now = new Date();
+        const datePart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+        const archiveId = `${datePart}_${timePart}`;
+
+        try {
+            const archiveRef = doc(db, "archivedGames", archiveId);
+            await setDoc(archiveRef, stateToArchive);
+            alert(`게임이 "${archiveId}" 이름으로 성공적으로 저장(보관)되었습니다.`);
+        } catch(error) {
+            console.error("게임 보관 저장 실패:", error);
+            alert("게임 저장에 실패했습니다.");
+        }
+    }
+    
     async function startNewGame() {
-        if (confirm('새로운 게임을 시작하시겠습니까?')) {
+        if (confirm('새로운 게임을 시작하시겠습니까? 현재 작업 내용은 초기화됩니다.')) {
+            const today = new Date();
+            const newGameDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
+            
             try {
-                const latestStateRef = doc(db, "gameStates", "latestState");
-                const docSnap = await getDoc(latestStateRef);
-
-                if (docSnap.exists()) {
-                    const currentStateData = docSnap.data();
-                    if (currentStateData.players && currentStateData.players.length > 0) {
-                        const now = new Date();
-                        const datePart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-                        const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
-                        const archiveId = `${datePart}_${timePart}`;
-
-                        const archiveRef = doc(db, "archivedGames", archiveId);
-                        await setDoc(archiveRef, currentStateData);
-                        console.log(`기존 게임이 ${archiveId}로 보관되었습니다.`);
-                    }
-                }
-
-                const today = new Date();
-                const newGameDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
-                await setDoc(latestStateRef, emptyState);
-                
+                // 실시간 작업 문서를 빈 상태로 덮어쓰기
+                await setDoc(doc(db, "gameStates", "latestState"), emptyState);
+                // onSnapshot이 변경을 감지하고 자동으로 화면을 리셋할 것입니다.
             } catch (error) {
                 console.error("새 게임 시작 오류:", error);
                 alert("새 게임을 시작하는 데 실패했습니다.");
@@ -345,13 +357,13 @@
         playerList.innerHTML = '';
         prizeDistributionBody.removeAttribute('data-custom-prizes');
         globalRanks = [];
-        if (doUpdate) updateAll(null, false);
+        if (doUpdate) updateAll();
     }
     function endGameAndCapture() { if (confirm('결과를 이미지로 저장하시겠습니까?')) { html2canvas(document.getElementById('final-results-area'), { scale: 2 }).then(canvas => { const link = document.createElement('a'); const tourneyText = tournamentSelect.options[tournamentSelect.selectedIndex].text; link.download = `게임정산_${gameDateEl.value}_${tourneyText}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); } }
 
     const KOREAN_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
     function setToday() { const today = new Date(); gameDateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); updateDayOfWeek(); }
-    function updateDayOfWeek() { const selectedDate = new Date(gameDateEl.value); const dayIndex = new Date(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()).getDay(); dayOfWeekEl.textContent = `(${KOREAN_DAYS[dayIndex]})`; updateGameInfoDisplay(); updateAll(); }
+    function updateDayOfWeek() { const selectedDate = new Date(gameDateEl.value); const dayIndex = new Date(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()).getDay(); dayOfWeekEl.textContent = `(${KOREAN_DAYS[dayIndex]})`; updateGameInfoDisplay(); }
     function updateGameInfoDisplay() { const date = gameDateEl.value; const dayOfWeek = dayOfWeekEl.textContent; const tournamentText = tournamentSelect.options[tournamentSelect.selectedIndex].text; if (date) { gameInfoDisplayEl.textContent = `${date} ${dayOfWeek} / ${tournamentText}`; } else { gameInfoDisplayEl.textContent = ''; } }
     
     function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
@@ -387,10 +399,8 @@
                     target.value = '';
                 }
             }
-            updateAll();
-        } else if (target.matches('.start-hour, .start-minute, .end-hour, .end-minute')) {
-            updateAll();
         }
+        updateAll();
     }
     
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
@@ -658,14 +668,12 @@
         }
     }
     
-    // --- 여기부터 수정된(구현된) 코드입니다 ---
     async function openLoadGameModal() {
         const listEl = document.getElementById('archived-games-list');
         listEl.innerHTML = '불러오는 중...';
         loadGameModal.style.display = 'flex';
 
         try {
-            // Firebase 대신 브라우저에서 직접 정렬하기 위해 query 수정
             const gamesCollectionRef = collection(db, "archivedGames");
             const querySnapshot = await getDocs(gamesCollectionRef);
             
@@ -675,16 +683,13 @@
                 return;
             }
             
-            // 1. 가져온 데이터를 배열로 변환
             const games = [];
             querySnapshot.forEach(doc => {
                 games.push({ id: doc.id, data: doc.data() });
             });
 
-            // 2. 배열을 ID(날짜/시간) 기준으로 최신순 정렬
             games.sort((a, b) => b.id.localeCompare(a.id));
 
-            // 3. 정렬된 배열을 기반으로 목록 생성
             games.forEach(game => {
                 const gameData = game.data;
                 const playerCount = gameData.players ? gameData.players.length : 0;
@@ -700,7 +705,6 @@
             listEl.innerHTML = '게임을 불러오는 데 실패했습니다.';
         }
     }
-    // --- 여기까지 수정된(구현된) 코드입니다 ---
     
     async function handleLoadGameModalActions(e) {
         const target = e.target;
@@ -742,8 +746,8 @@
     function prizeConfigForCount(count) { if (count >= 5 && count <= 7) return [{ r: 1, p: 0.65 }, { r: 2, p: 0.35 }]; if (count >= 8 && count <= 11) return [{ r: 1, p: 0.60 }, { r: 2, p: 0.30 }, { r: 3, p: 0.10 }]; if (count >= 12 && count <= 17) return [{ r: 1, p: 0.50 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }]; if (count >= 18 && count <= 35) return [{ r: 1, p: 0.45 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }, { r: 5, p: 0.05 }]; return []; }
     
     document.addEventListener('DOMContentLoaded', () => {
-        addAllEventListeners();
         setupRealtimeListener();
+        addAllEventListeners();
     });
 </script>
 </body>
