@@ -175,10 +175,6 @@
     </div>
 </div>
 
-
-<datalist id="dealer-names-list">{% for name in dealers %}<option value="{{ name }}">{% endfor %}</datalist>
-<datalist id="player-names-list">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
-
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, orderBy, getDocs, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -196,8 +192,13 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const DEALER_NAMES = {{ dealers | tojson }};
-    const PLAYER_NAMES = {{ players | tojson }};
+    // --- 여기부터 수정된(구현된) 코드입니다 ---
+    // app.py에서 관리하던 이름 목록을 JavaScript로 직접 가져옴
+    const DEALER_NAMES = [
+        "강아지똥", "고구마", "귤", "나미", "나인", "노하", "돌멩이", "돌체", "디네로", "뚜", "룰루", "림프", "망고", "문문", "상일", "세준", "송하", "스냅", "승민", "안아줘요", "야도란", "영재", "영준", "예수", "오팔", "옥수수", "용준", "우주", "유미", "의성", "이방인", "인사이더", "자쓰민", "장현", "재혁", "재형", "지구", "지호", "진상", "찐빵", "철", "체크", "카피바라", "쿠쿠", "태산", "태은", "티라미슈", "팔팔", "팝스타", "팬더", "포카드", "하람", "현", "호준", "홍", "환경", "황", "훈", "BOK", "DD", "DY", "HM", "KJ", "Lin"
+    ];
+    const PLAYER_NAMES = DEALER_NAMES;
+    // --- 여기까지 수정된(구현된) 코드입니다 ---
     
     const dealerList = document.getElementById('dealer-list');
     const playerList = document.getElementById('player-list');
@@ -367,14 +368,12 @@
     
     function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
     
-    // --- 여기부터 수정된(구현된) 함수입니다 ---
     function addDealerRow(data = {}, doUpdate = true) {
         const row = document.createElement('div'); row.className = 'item-row';
         const hourOptions = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
         const minOptions = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
         
         let dealerOptionsHTML = createDropdownOptions(DEALER_NAMES, data.name, true);
-        // 저장된 데이터(data.name)가 기본 목록(DEALER_NAMES)에 없으면, 수동으로 option 태그를 추가
         if (data.name && !DEALER_NAMES.includes(data.name)) {
             dealerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
         }
@@ -386,7 +385,6 @@
         if (data.isClosed) { row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; }
         if (doUpdate) updateAll();
     }
-    // --- 여기까지 수정된(구현된) 함수입니다 ---
 
     function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
     
