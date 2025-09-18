@@ -15,17 +15,12 @@
         button.delete-btn { background-color: #dc3545; }
         button.action-btn { background-color: #28a745; }
         .item-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 15px; border: 1px solid #ddd; background-color: #fafafa; }
-        #player-list .item-row { border-radius: 0; margin-top: 0; }
-        #player-list .item-row + .item-row { border-top: none; }
-        #player-list .item-row:first-child { border-top-left-radius: 6px; border-top-right-radius: 6px; }
-        #player-list .item-row:last-child { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
         .summary-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.95em; }
         .summary-table th, .summary-table td { border: 1px solid #ddd; padding: 8px; }
         .summary-table th { background-color: #f2f2f2; }
         .date-selector, .rank-selector-wrapper { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 20px; padding: 10px; background-color: #e9ecef; border-radius: 6px; }
         .player-entries { display: inline-flex; gap: 5px; align-items: center; background-color: #e9ecef; padding: 5px; border-radius: 4px; min-height: 20px; }
         .player-entries span { background-color: #007bff; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.9em; }
-        .dealer-num, .player-num { font-weight: bold; font-size: 1.2em; margin-right: 5px; color: #6c757d; }
         .text-center { text-align: center; }
         .summary-table td, .summary-table th { text-align: center; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
@@ -38,6 +33,9 @@
         #archived-games-list .game-item { padding: 10px; border: 1px solid #eee; margin-top: -1px; cursor: pointer; }
         #archived-games-list .game-item:hover { background-color: #f0f0f0; }
         #archived-games-list .game-item.selected { background-color: #007bff; color: white; border-color: #007bff; }
+        .player-control-panel { padding: 15px; border: 1px solid #ddd; background-color: #fafafa; border-radius: 6px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        #player-details-panel { display: none; gap: 10px; align-items: center; flex-wrap: wrap; }
+        #selected-player-entries { flex-basis: 100%; margin-top: 10px; }
 
         @media (max-width: 768px) {
             .container { padding: 10px; }
@@ -47,8 +45,9 @@
             #dealer-list .item-row { flex-direction: column; align-items: stretch; gap: 12px; }
             .dealer-line { display: flex; align-items: center; gap: 8px; width: 100%; }
             .dealer-line .result { margin-left: auto; }
-            #player-list .item-row { flex-wrap: wrap; }
-            .player-entries { flex-basis: 100%; margin-top: 10px; justify-content: flex-start; flex-wrap: wrap; }
+            .player-control-panel { flex-direction: column; align-items: stretch; }
+            #player-details-panel { justify-content: center; }
+            #selected-player-entries { flex-basis: auto; }
         }
     </style>
 </head>
@@ -71,13 +70,26 @@
     </div>
 
     <div class="section"><h2>딜러 관리</h2><div id="dealer-list"></div><button id="add-dealer-btn" style="margin-top: 10px;">딜러 추가</button></div>
+    
     <div class="section">
         <h2>플레이어 관리</h2>
-        <div id="player-list"></div>
-        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
-            <button id="add-player-btn">플레이어 추가</button>
+        <div class="player-control-panel">
+            <select id="player-selector" style="width: 150px;"></select>
+            <div id="player-details-panel">
+                <label><input type="checkbox" id="player-entry-fee-check"> 입장료</label>
+                <label><input type="checkbox" id="player-early-bird-check"> 얼리</label>
+                <select id="player-entry-type-select">
+                    <option value="입금">입금</option>
+                    <option value="포인트">포인트</option>
+                </select>
+                <button id="player-add-entry-btn" class="action-btn">참가/리바이</button>
+                <button id="player-delete-entry-btn" class="delete-btn">마지막 참가 취소</button>
+                <button id="player-delete-btn" class="delete-btn" style="background-color: #6c757d;">선택한 플레이어 삭제</button>
+            </div>
+            <div id="selected-player-entries" class="player-entries" style="display: none;"></div>
         </div>
     </div>
+
     <div class="section">
         <h2>등수 지정</h2>
         <div class="rank-selector-wrapper">
@@ -192,21 +204,16 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- 여기부터 수정된(구현된) 코드입니다 ---
-    // app.py에서 관리하던 이름 목록을 JavaScript로 직접 가져옴
     const DEALER_NAMES = [
         "강아지똥", "고구마", "귤", "나미", "나인", "노하", "돌멩이", "돌체", "디네로", "뚜", "룰루", "림프", "망고", "문문", "상일", "세준", "송하", "스냅", "승민", "안아줘요", "야도란", "영재", "영준", "예수", "오팔", "옥수수", "용준", "우주", "유미", "의성", "이방인", "인사이더", "자쓰민", "장현", "재혁", "재형", "지구", "지호", "진상", "찐빵", "철", "체크", "카피바라", "쿠쿠", "태산", "태은", "티라미슈", "팔팔", "팝스타", "팬더", "포카드", "하람", "현", "호준", "홍", "환경", "황", "훈", "BOK", "DD", "DY", "HM", "KJ", "Lin"
     ];
     const PLAYER_NAMES = DEALER_NAMES;
-    // --- 여기까지 수정된(구현된) 코드입니다 ---
     
     const dealerList = document.getElementById('dealer-list');
-    const playerList = document.getElementById('player-list');
     const prizePoolEl = document.getElementById('prize-pool');
     const prizeDistributionBody = document.getElementById('prize-distribution-body');
     const gameDateEl = document.getElementById('game-date');
     const dayOfWeekEl = document.getElementById('day-of-week');
-    const rankAssignmentEl = document.getElementById('rank-assignment');
     const dealerSummaryBody = document.getElementById('dealer-summary-body');
     const prizeModal = document.getElementById('prize-modal');
     const tournamentSelect = document.getElementById('tournament-select');
@@ -218,10 +225,18 @@
     
     let isUpdatingFromFirebase = false; 
     let globalRanks = [];
+    
+    let players = []; 
+    const playerSelector = document.getElementById('player-selector');
+    const playerDetailsPanel = document.getElementById('player-details-panel');
+    const playerEntryFeeCheck = document.getElementById('player-entry-fee-check');
+    const playerEarlyBirdCheck = document.getElementById('player-early-bird-check');
+    const playerEntryTypeSelect = document.getElementById('player-entry-type-select');
+    const playerDeleteBtn = document.getElementById('player-delete-btn');
+    const selectedPlayerEntries = document.getElementById('selected-player-entries');
 
     function addAllEventListeners() {
         document.getElementById('add-dealer-btn').addEventListener('click', addDealerRow);
-        document.getElementById('add-player-btn').addEventListener('click', addPlayerRow);
         document.getElementById('today-btn').addEventListener('click', setToday);
         document.getElementById('new-game-btn').addEventListener('click', startNewGame);
         document.getElementById('game-end-btn').addEventListener('click', endGameAndCapture);
@@ -233,12 +248,17 @@
         loadGameModal.addEventListener('click', handleLoadGameModalActions);
         dealerList.addEventListener('click', handleDealerActions);
         dealerList.addEventListener('change', handleDealerInputs);
-        playerList.addEventListener('click', handlePlayerActions);
-        playerList.addEventListener('change', handlePlayerInputs);
         prizeModal.addEventListener('click', handleModalActions);
         prizeModal.addEventListener('input', handleModalInputs);
         gameDateEl.addEventListener('change', () => { updateDayOfWeek(); updateAll(); });
         tournamentSelect.addEventListener('change', updateAll);
+
+        playerSelector.addEventListener('change', handlePlayerSelection);
+        playerEntryFeeCheck.addEventListener('change', updateSelectedPlayerData);
+        playerEarlyBirdCheck.addEventListener('change', updateSelectedPlayerData);
+        document.getElementById('player-add-entry-btn').addEventListener('click', addEntryForSelectedPlayer);
+        document.getElementById('player-delete-entry-btn').addEventListener('click', deleteLastEntryForSelectedPlayer);
+        playerDeleteBtn.addEventListener('click', deleteSelectedPlayer);
     }
     
     function setupRealtimeListener() {
@@ -283,7 +303,7 @@
             tournamentId: tournamentSelect.value,
             gameTitle: `${gameDateEl.value} / ${tourneyText}`,
             dealers: Array.from(document.querySelectorAll('#dealer-list .item-row')).map(row => ({ name: row.querySelector('.dealer-name').value, startHour: row.querySelector('.start-hour').value, startMinute: row.querySelector('.start-minute').value, endHour: row.querySelector('.end-hour').value, endMinute: row.querySelector('.end-minute').value, resultHTML: row.querySelector('.result').innerHTML, isClosed: row.querySelector('.close-btn').disabled, })),
-            players: Array.from(document.querySelectorAll('#player-list .item-row')).map(row => ({ name: row.querySelector('.player-name').value, entryFee: row.querySelector('.entry-fee').checked, earlyBird: row.querySelector('.early-bird').checked, entries: JSON.parse(row.dataset.entries || '[]'), })),
+            players: players, 
             ranks: globalRanks,
             customPrizes: JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'),
         };
@@ -291,20 +311,22 @@
 
     function restoreState(state) {
         dealerList.innerHTML = '';
-        playerList.innerHTML = '';
         gameDateEl.value = state.date;
         tournamentSelect.value = state.tournamentId || 't1';
         updateDayOfWeek();
         (state.dealers || []).forEach(data => addDealerRow(data, false));
-        (state.players || []).forEach(data => addPlayerRow(data, false));
+        
+        players = state.players || [];
+        
         if (state.customPrizes) { prizeDistributionBody.dataset.customPrizes = JSON.stringify(state.customPrizes); }
         globalRanks = state.ranks || [];
+        
+        refreshPlayerUI();
         updateAll(false);
     }
     
     function updateAll(doSave = true) {
         renumberDealers();
-        renumberPlayers();
         updateGameSummary();
         updateDealerSummaryTable();
         updatePlayerSummaryTable();
@@ -354,10 +376,13 @@
 
     function resetUI(doUpdate = true) {
         dealerList.innerHTML = '';
-        playerList.innerHTML = '';
+        players = [];
         prizeDistributionBody.removeAttribute('data-custom-prizes');
         globalRanks = [];
-        if (doUpdate) updateAll();
+        if (doUpdate) {
+            refreshPlayerUI();
+            updateAll();
+        }
     }
     function endGameAndCapture() { if (confirm('결과를 이미지로 저장하시겠습니까?')) { html2canvas(document.getElementById('final-results-area'), { scale: 2 }).then(canvas => { const link = document.createElement('a'); const tourneyText = tournamentSelect.options[tournamentSelect.selectedIndex].text; link.download = `게임정산_${gameDateEl.value}_${tourneyText}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); } }
 
@@ -413,103 +438,182 @@
     
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
     
+    function refreshPlayerUI() {
+        const selectedValue = playerSelector.value;
+        playerSelector.innerHTML = '<option value="">--플레이어 선택--</option>';
+        
+        let allPlayerNames = [...PLAYER_NAMES, ...players.map(p => p.name)];
+        allPlayerNames = [...new Set(allPlayerNames)].sort(); 
+
+        allPlayerNames.forEach(name => {
+            if (name) {
+                const option = new Option(name, name);
+                playerSelector.add(option);
+            }
+        });
+        playerSelector.innerHTML += '<option value="__ADD_NEW__">--- 새 플레이어 추가 ---</option>';
+        
+        try {
+            playerSelector.value = selectedValue;
+        } catch(e) {
+            playerSelector.value = "";
+        }
+        
+        updatePlayerSummaryTable();
+        updatePlayerDetailsPanel();
+    }
+
+    function handlePlayerSelection() {
+        const selectedName = playerSelector.value;
+
+        if (selectedName === '__ADD_NEW__') {
+            const newName = prompt("새로운 플레이어 이름을 입력하세요:");
+            
+            playerSelector.value = '';
+
+            if (newName && newName.trim() !== '') {
+                const trimmedName = newName.trim();
+                if (players.some(p => p.name === trimmedName)) {
+                    alert("이미 참가한 플레이어입니다.");
+                    playerSelector.value = trimmedName;
+                } else {
+                    const newPlayer = { name: trimmedName, entryFee: false, earlyBird: false, entries: [] };
+                    players.push(newPlayer);
+                    resetPrizeAndRanks();
+                    refreshPlayerUI();
+                    playerSelector.value = trimmedName;
+                    updateAll();
+                }
+            }
+            updatePlayerDetailsPanel();
+            return;
+        }
+
+        if (selectedName) {
+            let player = players.find(p => p.name === selectedName);
+            if (!player) {
+                player = { name: selectedName, entryFee: false, earlyBird: false, entries: [] };
+                players.push(player);
+                resetPrizeAndRanks();
+                refreshPlayerUI();
+                playerSelector.value = selectedName; 
+                updateAll();
+            }
+        }
+        
+        updatePlayerDetailsPanel();
+    }
+
+    function updatePlayerDetailsPanel() {
+        const selectedName = playerSelector.value;
+        const player = players.find(p => p.name === selectedName);
+
+        if (player) {
+            playerDetailsPanel.style.display = 'flex';
+            playerDeleteBtn.style.display = 'block';
+            selectedPlayerEntries.style.display = 'inline-flex';
+
+            playerEntryFeeCheck.checked = player.entryFee;
+            playerEarlyBirdCheck.checked = player.earlyBird;
+            
+            selectedPlayerEntries.innerHTML = '';
+            player.entries.forEach(entry => {
+                const span = document.createElement('span');
+                span.textContent = entry;
+                selectedPlayerEntries.appendChild(span);
+            });
+
+        } else {
+            playerDetailsPanel.style.display = 'none';
+            playerDeleteBtn.style.display = 'none';
+            selectedPlayerEntries.style.display = 'none';
+        }
+    }
+
+    function updateSelectedPlayerData() {
+        const selectedName = playerSelector.value;
+        const player = players.find(p => p.name === selectedName);
+        if (player) {
+            player.entryFee = playerEntryFeeCheck.checked;
+            player.earlyBird = playerEarlyBirdCheck.checked;
+            updateAll();
+            refreshPlayerUI();
+        }
+    }
+
+    function addEntryForSelectedPlayer() {
+        const selectedName = playerSelector.value;
+        const player = players.find(p => p.name === selectedName);
+        if (player) {
+            const maxEntries = 1 + (player.earlyBird ? 2 : 1);
+            if (player.entries.length >= maxEntries) {
+                alert("최대 참가 횟수를 초과했습니다.");
+                return;
+            }
+            player.entries.push(playerEntryTypeSelect.value);
+            resetPrizeAndRanks();
+            updateAll();
+            refreshPlayerUI();
+        }
+    }
+
+    function deleteLastEntryForSelectedPlayer() {
+        const selectedName = playerSelector.value;
+        const player = players.find(p => p.name === selectedName);
+        if (player && player.entries.length > 0) {
+            player.entries.pop();
+            resetPrizeAndRanks();
+            updateAll();
+            refreshPlayerUI();
+        }
+    }
+    
+    function deleteSelectedPlayer() {
+        const selectedName = playerSelector.value;
+        if (selectedName && confirm(`'${selectedName}' 플레이어를 삭제하시겠습니까?`)) {
+            players = players.filter(p => p.name !== selectedName);
+            playerSelector.value = '';
+            resetPrizeAndRanks();
+            updateAll();
+            refreshPlayerUI();
+        }
+    }
+
     function resetPrizeAndRanks() {
         console.log("플레이어 수 또는 이름 변경: 등수 및 상금 정보를 초기화합니다.");
         globalRanks = [];
         prizeDistributionBody.removeAttribute('data-custom-prizes');
     }
 
-    function renumberPlayers() { document.querySelectorAll('#player-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.player-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'player-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
-    
-    function addPlayerRow(data = {}, doUpdate = true) {
-        const row = document.createElement('div'); row.className = 'item-row player-row';
-        row.dataset.entries = JSON.stringify(data.entries || []);
-        let playerOptionsHTML = createDropdownOptions(PLAYER_NAMES, data.name, true);
-        if (data.name && !PLAYER_NAMES.includes(data.name)) {
-            playerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
-        }
-        row.innerHTML = `<strong class="player-num"></strong><select class="player-name">${playerOptionsHTML}</select> <label><input type="checkbox" class="entry-fee" ${data.entryFee ? 'checked' : ''}> 입장료</label> <label><input type="checkbox" class="early-bird" ${data.earlyBird ? 'checked' : ''}> 얼리</label> <select class="entry-type"><option value="입금">입금</option><option value="포인트">포인트</option></select> <button class="action-btn add-entry-btn">확인</button> <div class="player-entries"></div> <button class="delete-btn" style="margin-left: auto;">삭제</button>`;
-        playerList.appendChild(row);
-        if (data.name) { row.querySelector('.player-name').value = data.name; }
-        renderPlayerEntries(row);
-        
-        if (doUpdate) {
-            resetPrizeAndRanks();
-            updateAll();
-        }
-    }
-
-    function renderPlayerEntries(row) { const entries = JSON.parse(row.dataset.entries || '[]'); const container = row.querySelector('.player-entries'); container.innerHTML = entries.map(entry => `<span>${entry}</span>`).join(''); const maxEntries = 1 + (row.querySelector('.early-bird').checked ? 2 : 1); row.querySelector('.add-entry-btn').disabled = entries.length >= maxEntries; }
-    
-    function handlePlayerActions(e) { 
-        const target = e.target; 
-        const row = target.closest('.player-row'); 
-        if (!row) return; 
-
-        if (target.matches('.add-entry-btn')) { 
-            const entries = JSON.parse(row.dataset.entries); 
-            entries.push(row.querySelector('.entry-type').value); 
-            row.dataset.entries = JSON.stringify(entries); 
-            renderPlayerEntries(row); 
-            updateAll(); 
-        } else if (target.matches('.delete-btn')) { 
-            const entries = JSON.parse(row.dataset.entries); 
-            if (entries.length > 0) { 
-                entries.pop(); 
-                row.dataset.entries = JSON.stringify(entries); 
-                renderPlayerEntries(row); 
-                updateAll();
-            } else { 
-                row.remove(); 
-                resetPrizeAndRanks();
-                updateAll();
-            } 
-        } 
-    }
-
-    function handlePlayerInputs(e) { 
-        const target = e.target; 
-        const row = target.closest('.player-row'); 
-        if (!row) return; 
-        
-        if (target.matches('.player-name')) { 
-            if (target.value === '__DIRECT_INPUT__') { 
-                const customName = prompt('플레이어 닉네임을 입력하세요:', ''); 
-                if (customName && customName.trim() !== '') { 
-                    const newName = customName.trim();
-                    const newOption = new Option(newName, newName);
-                    target.add(newOption);
-                    target.value = newName;
-                } else { 
-                    target.value = ''; 
-                } 
-            } 
-            resetPrizeAndRanks();
-            updateAll(); 
-        } else if (target.matches('.entry-fee') || target.matches('.early-bird')) { 
-            renderPlayerEntries(row); 
-            updateAll(); 
-        } 
-    }
-    
     function updatePlayerSummaryTable() {
         playerSummaryBody.innerHTML = '';
-        document.querySelectorAll('#player-list .item-row').forEach((row, index) => {
-            const name = row.querySelector('.player-name').value;
-            if (!name) return;
-            const entryFee = row.querySelector('.entry-fee').checked ? 'O' : 'X';
-            const earlyBird = row.querySelector('.early-bird').checked ? 'O' : 'X';
-            const entries = JSON.parse(row.dataset.entries || '[]');
-            const buyIn = entries[0] || '';
-            const rebuy1 = entries[1] || '';
-            const rebuy2 = entries[2] || '';
+        players.forEach((player, index) => {
+            if (!player.name) return;
+            const entryFee = player.entryFee ? 'O' : 'X';
+            const earlyBird = player.earlyBird ? 'O' : 'X';
+            const buyIn = player.entries[0] || '';
+            const rebuy1 = player.entries[1] || '';
+            const rebuy2 = player.entries[2] || '';
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${entryFee}</td><td>${earlyBird}</td><td>${buyIn}</td><td>${rebuy1}</td><td>${rebuy2}</td>`;
+            tr.innerHTML = `<td>${index + 1}</td><td>${player.name}</td><td>${entryFee}</td><td>${earlyBird}</td><td>${buyIn}</td><td>${rebuy1}</td><td>${rebuy2}</td>`;
             playerSummaryBody.appendChild(tr);
         });
     }
     
-    function updateGameSummary() { let prizeBuyInCount = 0; const playerRows = document.querySelectorAll('.player-row'); playerRows.forEach(row => { prizeBuyInCount += JSON.parse(row.dataset.entries || '[]').length; }); const totalPrize = prizeBuyInCount * 250; totalPrizeForModal = totalPrize; prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); if (customPrizes) { renderCustomPrizes(customPrizes); } else { calculatePrizeDistribution(totalPrize, playerRows.length); } }
+    function updateGameSummary() { 
+        let prizeBuyInCount = 0; 
+        players.forEach(p => { prizeBuyInCount += p.entries.length; });
+        const totalPrize = prizeBuyInCount * 250; 
+        totalPrizeForModal = totalPrize; 
+        prizePoolEl.textContent = `총상금: ${totalPrize.toLocaleString()} 포인트`; 
+        const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'); 
+        if (customPrizes) { 
+            renderCustomPrizes(customPrizes); 
+        } else { 
+            calculatePrizeDistribution(totalPrize, players.length); 
+        } 
+    }
+    
     function calculatePrizeDistribution(totalPrize, playerCount) {
         prizeDistributionBody.innerHTML = '';
         const prizeConfig = prizeConfigForCount(playerCount);
@@ -526,11 +630,9 @@
         const editorBody = rankModal.querySelector('#rank-editor-table tbody');
         editorBody.innerHTML = ''; 
 
-        const players = Array.from(document.querySelectorAll('#player-list .player-name'))
-                             .map(select => select.value)
-                             .filter(name => name);
-        const playerCount = players.length;
-
+        const playerNames = players.map(p => p.name).filter(name => name);
+        const playerCount = playerNames.length;
+        
         const prizeConfig = prizeConfigForCount(playerCount);
 
         if (prizeConfig.length === 0) {
@@ -547,7 +649,7 @@
                 rank: rankText,
                 player: previouslySelectedPlayer,
                 prize: prizeAmount
-            }, players);
+            }, playerNames);
         });
 
         rankModal.style.display = 'flex';
@@ -596,18 +698,18 @@
     function openPrizeModal() {
         const editorBody = prizeModal.querySelector('#prize-editor-table tbody');
         editorBody.innerHTML = '';
-        const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
+        const playerNames = players.map(p => p.name).filter(name => name);
         const customPrizes = JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null');
         
         document.getElementById('modal-total-prize').textContent = totalPrizeForModal.toLocaleString();
         
         if (customPrizes) {
-            customPrizes.forEach(prize => addPrizeEditorRow(prize, players));
+            customPrizes.forEach(prize => addPrizeEditorRow(prize, playerNames));
         } else {
-            const prizeConfig = prizeConfigForCount(players.length);
+            const prizeConfig = prizeConfigForCount(playerNames.length);
             prizeConfig.forEach((p, index) => {
                 const prize = Math.round(totalPrizeForModal * p.p);
-                addPrizeEditorRow({ rank: `${p.r}등`, player: globalRanks[index] || '', prize: prize }, players);
+                addPrizeEditorRow({ rank: `${p.r}등`, player: globalRanks[index] || '', prize: prize }, playerNames);
             });
         }
         
@@ -644,8 +746,18 @@
             prizeModal.style.display = 'none';
             updateAll();
         } else if (target.matches('#add-rank-btn')) {
-            const players = Array.from(document.querySelectorAll('#player-list .player-name')).map(select => select.value).filter(name => name);
-            addPrizeEditorRow({}, players);
+            const playerNames = players.map(p => p.name).filter(name => name);
+            const rankInputs = prizeModal.querySelectorAll('.modal-rank');
+            let maxRank = 0;
+            rankInputs.forEach(input => {
+                const rankValue = parseInt(input.value) || 0;
+                if (rankValue > maxRank) {
+                    maxRank = rankValue;
+                }
+            });
+            const newRankText = `${maxRank + 1}등`;
+
+            addPrizeEditorRow({ rank: newRankText }, playerNames);
         } else if (target.matches('.delete-btn')) {
             target.closest('tr').remove();
             updateModalSum();
@@ -752,7 +864,15 @@
         }
     }
     
-    function createDropdownOptions(names, selectedValue, withDirectInputOption = false) { let optionsHtml = ''; if (withDirectInputOption) { optionsHtml += `<option value="__DIRECT_INPUT__">-- 직접입력 --</option>`; } optionsHtml += names.map(name => `<option value="${name}" ${name === selectedValue ? 'selected' : ''}>${name}</option>`).join(''); return `<option value="">--선택--</option>` + optionsHtml; }
+    function createDropdownOptions(names, selectedValue, withDirectInputOption = false) { 
+        let optionsHtml = ''; 
+        if (withDirectInputOption) { 
+            optionsHtml += `<option value="__DIRECT_INPUT__">-- 직접입력 --</option>`; 
+        } 
+        optionsHtml += names.map(name => `<option value="${name}" ${name === selectedValue ? 'selected' : ''}>${name}</option>`).join(''); 
+        return `<option value="">--선택--</option>` + optionsHtml; 
+    }
+    
     function prizeConfigForCount(count) { if (count >= 5 && count <= 7) return [{ r: 1, p: 0.65 }, { r: 2, p: 0.35 }]; if (count >= 8 && count <= 11) return [{ r: 1, p: 0.60 }, { r: 2, p: 0.30 }, { r: 3, p: 0.10 }]; if (count >= 12 && count <= 17) return [{ r: 1, p: 0.50 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }]; if (count >= 18 && count <= 35) return [{ r: 1, p: 0.45 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }, { r: 5, p: 0.05 }]; return []; }
     
     document.addEventListener('DOMContentLoaded', () => {
