@@ -35,6 +35,7 @@
         #archived-games-list .game-item.selected { background-color: #007bff; color: white; border-color: #007bff; }
         .player-control-panel { padding: 15px; border: 1px solid #ddd; background-color: #fafafa; border-radius: 6px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         #player-details-panel { display: none; gap: 10px; align-items: center; flex-wrap: wrap; }
+        #player-selector { min-width: 140px; }
         #selected-player-entries { flex-basis: 100%; margin-top: 10px; }
 
         @media (max-width: 768px) {
@@ -74,7 +75,7 @@
     <div class="section">
         <h2>플레이어 관리</h2>
         <div class="player-control-panel">
-            <select id="player-selector" style="width: 150px;"></select>
+            <select id="player-selector"></select>
             <div id="player-details-panel">
                 <label><input type="checkbox" id="player-entry-fee-check"> 입장료</label>
                 <label><input type="checkbox" id="player-early-bird-check"> 얼리</label>
@@ -440,8 +441,11 @@
     
     function refreshPlayerUI() {
         const selectedValue = playerSelector.value;
-        playerSelector.innerHTML = '<option value="">--플레이어 선택--</option>';
-        
+        playerSelector.innerHTML = '';
+                
+        playerSelector.add(new Option('--플레이어 선택--', ''));
+        playerSelector.add(new Option('--- 새 플레이어 추가 ---', '__ADD_NEW__'));
+
         let allPlayerNames = [...PLAYER_NAMES, ...players.map(p => p.name)];
         allPlayerNames = [...new Set(allPlayerNames)].sort(); 
 
@@ -451,7 +455,6 @@
                 playerSelector.add(option);
             }
         });
-        playerSelector.innerHTML += '<option value="__ADD_NEW__">--- 새 플레이어 추가 ---</option>';
         
         try {
             playerSelector.value = selectedValue;
@@ -469,8 +472,6 @@
         if (selectedName === '__ADD_NEW__') {
             const newName = prompt("새로운 플레이어 이름을 입력하세요:");
             
-            playerSelector.value = '';
-
             if (newName && newName.trim() !== '') {
                 const trimmedName = newName.trim();
                 if (players.some(p => p.name === trimmedName)) {
@@ -484,6 +485,8 @@
                     playerSelector.value = trimmedName;
                     updateAll();
                 }
+            } else {
+                playerSelector.value = '';
             }
             updatePlayerDetailsPanel();
             return;
@@ -507,12 +510,12 @@
     function updatePlayerDetailsPanel() {
         const selectedName = playerSelector.value;
         const player = players.find(p => p.name === selectedName);
+        
+        playerDeleteBtn.style.display = player ? 'block' : 'none';
+        selectedPlayerEntries.style.display = player ? 'inline-flex' : 'none';
 
         if (player) {
             playerDetailsPanel.style.display = 'flex';
-            playerDeleteBtn.style.display = 'block';
-            selectedPlayerEntries.style.display = 'inline-flex';
-
             playerEntryFeeCheck.checked = player.entryFee;
             playerEarlyBirdCheck.checked = player.earlyBird;
             
@@ -525,8 +528,6 @@
 
         } else {
             playerDetailsPanel.style.display = 'none';
-            playerDeleteBtn.style.display = 'none';
-            selectedPlayerEntries.style.display = 'none';
         }
     }
 
