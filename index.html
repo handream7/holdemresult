@@ -25,6 +25,11 @@
         .summary-table td, .summary-table th { text-align: center; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background-color: white; padding: 25px; border-radius: 8px; width: 600px; max-height: 80vh; overflow-y: auto; }
+        /* --- 여기부터 수정된(구현된) 코드입니다 --- */
+        #password-modal .modal-content { width: 300px; } /* 암호 모달은 작게 설정 */
+        #password-modal-input { width: calc(100% - 10px); padding: 8px; margin-bottom: 15px; }
+        #remember-auth-label { display: flex; align-items: center; gap: 5px; font-size: 0.9em; }
+        /* --- 여기까지 수정된(구현된) 코드입니다 --- */
         .modal-content h3 { margin-top: 0; }
         .modal-actions { text-align: right; margin-top: 20px; }
         #prize-editor-table input, #rank-editor-table input { width: 100px; text-align: right; }
@@ -71,7 +76,7 @@
     </div>
 
     <div class="section"><h2>딜러 관리</h2><div id="dealer-list"></div><button id="add-dealer-btn" style="margin-top: 10px;">딜러 추가</button></div>
-    
+
     <div class="section">
         <h2>플레이어 관리</h2>
         <div class="player-control-panel">
@@ -97,7 +102,7 @@
             <button id="open-rank-modal-btn">등수 지정하기</button>
         </div>
     </div>
-    
+
     <div id="final-results-area">
         <div class="section">
             <h2 class="text-center">게임 결과</h2>
@@ -134,7 +139,7 @@
             </table>
         </div>
     </div>
-    
+
     <div id="game-controls" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
         <button id="edit-prize-btn" style="background-color: #ffc107; color: #212529;">상금 현황 수정</button>
         <button id="game-end-btn" style="background-color:#6f42c1;">결과 이미지 저장</button>
@@ -142,6 +147,7 @@
 
 </div>
 <div class="container" style="margin-top:20px; text-align: right;">
+    <button id="add-member-btn" style="background-color: #ffc107; color: #212529;">모임 멤버 추가</button>
     <button id="save-game-btn" style="background-color: #28a745;">저장</button>
     <button id="load-game-btn" style="background-color: #17a2b8;">이전 게임 불러오기</button>
     <button id="new-game-btn" style="background-color: #fd7e14;">새로운 정산 시작</button>
@@ -188,9 +194,22 @@
     </div>
 </div>
 
+<div id="password-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>암호 입력</h3>
+        <input type="password" id="password-modal-input" placeholder="암호를 입력하세요">
+        <label id="remember-auth-label">
+            <input type="checkbox" id="remember-auth-check"> 암호 다시 묻지 않기
+        </label>
+        <div class="modal-actions">
+            <button id="password-modal-close-btn" type="button" style="background-color: #6c757d;">취소</button>
+            <button id="password-modal-confirm-btn" type="button">확인</button>
+        </div>
+    </div>
+</div>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, orderBy, getDocs, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDxwPHSfIlcCii9RLBG9vhwQj2mhjzj3B8",
@@ -205,11 +224,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const DEALER_NAMES = [
-        "강아지똥", "개아범", "고구마", "곰인", "귤", "나미", "나인", "노하", "돌멩이", "돌체", "디네로", "뚜", "룰루", "림프", "망고", "문문", "상일", "세준", "송하", "스냅", "승민", "안아줘요", "야도란", "영재", "영준", "예수", "오팔", "옥수수", "용준", "우주", "유미", "윤혁", "의성", "이방인", "인사이더", "자쓰민", "장현", "재혁", "재형", "지구", "지호", "진상", "찐빵", "철", "체크", "침착맨", "카피바라", "쿠쿠", "태산", "태은", "티라미슈", "팔팔", "팝스타", "팬더", "포카드", "하람", "현", "호준", "홍", "환경", "화학", "황", "훈", "BOK", "DD", "DY", "HM", "KJ", "Lin"
-    ];
-    const PLAYER_NAMES = DEALER_NAMES;
-    
+    let groupMembers = [];
+    let temporaryMembers = [];
+
     const dealerList = document.getElementById('dealer-list');
     const prizePoolEl = document.getElementById('prize-pool');
     const prizeDistributionBody = document.getElementById('prize-distribution-body');
@@ -222,12 +239,15 @@
     const playerSummaryBody = document.getElementById('player-summary-body');
     const rankModal = document.getElementById('rank-modal');
     const loadGameModal = document.getElementById('load-game-modal');
+    // --- 여기부터 수정된(구현된) 코드입니다 ---
+    const passwordModal = document.getElementById('password-modal');
+    // --- 여기까지 수정된(구현된) 코드입니다 ---
     let totalPrizeForModal = 0;
-    
-    let isUpdatingFromFirebase = false; 
+
+    let isUpdatingFromFirebase = false;
     let globalRanks = [];
-    
-    let players = []; 
+
+    let players = [];
     const playerSelector = document.getElementById('player-selector');
     const playerDetailsPanel = document.getElementById('player-details-panel');
     const playerEntryFeeCheck = document.getElementById('player-entry-fee-check');
@@ -245,8 +265,12 @@
         document.getElementById('open-rank-modal-btn').addEventListener('click', openRankModal);
         document.getElementById('load-game-btn').addEventListener('click', openLoadGameModal);
         document.getElementById('save-game-btn').addEventListener('click', saveGameArchive);
+        document.getElementById('add-member-btn').addEventListener('click', handleAddNewMemberClick);
         rankModal.addEventListener('click', handleRankModalActions);
         loadGameModal.addEventListener('click', handleLoadGameModalActions);
+        // --- 여기부터 수정된(구현된) 코드입니다 ---
+        passwordModal.addEventListener('click', handlePasswordModalActions);
+        // --- 여기까지 수정된(구현된) 코드입니다 ---
         dealerList.addEventListener('click', handleDealerActions);
         dealerList.addEventListener('change', handleDealerInputs);
         prizeModal.addEventListener('click', handleModalActions);
@@ -261,11 +285,11 @@
         document.getElementById('player-delete-entry-btn').addEventListener('click', deleteLastEntryForSelectedPlayer);
         playerDeleteBtn.addEventListener('click', deleteSelectedPlayer);
     }
-    
-    function setupRealtimeListener() {
-        const docRef = doc(db, "gameStates", "latestState");
-        onSnapshot(docRef, (docSnap) => {
-            console.log("Firebase 데이터 변경 감지!");
+
+    function setupRealtimeListeners() {
+        const gameStateRef = doc(db, "gameStates", "latestState");
+        onSnapshot(gameStateRef, (docSnap) => {
+            console.log("Firebase 게임 상태 변경 감지!");
             const newState = docSnap.exists() ? docSnap.data() : null;
             const currentState = getCurrentState();
             if (JSON.stringify(newState) === JSON.stringify(currentState)) {
@@ -277,11 +301,24 @@
                 restoreState(newState);
             } else {
                 console.log("DB에 데이터 없음. 새로 시작합니다.");
-                resetUI(false); 
+                resetUI(false);
             }
             setTimeout(() => { isUpdatingFromFirebase = false; }, 500);
         });
+
+        const membersRef = doc(db, "lists", "members");
+        onSnapshot(membersRef, (docSnap) => {
+            console.log("Firebase 모임 멤버 변경 감지!");
+            if (docSnap.exists()) {
+                groupMembers = docSnap.data().names.sort() || [];
+            } else {
+                console.warn("모임 멤버 목록을 찾을 수 없습니다. Firestore에 'lists/members' 문서를 확인하세요.");
+                groupMembers = [];
+            }
+            refreshPlayerUI();
+        });
     }
+
 
     async function saveStateToFirebase() {
         if (isUpdatingFromFirebase) {
@@ -296,7 +333,7 @@
             console.error("Firebase 실시간 저장 실패! 상세 오류:", error);
         }
     }
-    
+
     function getCurrentState() {
         const tourneyText = tournamentSelect.options[tournamentSelect.selectedIndex].text;
         return {
@@ -304,9 +341,10 @@
             tournamentId: tournamentSelect.value,
             gameTitle: `${gameDateEl.value} / ${tourneyText}`,
             dealers: Array.from(document.querySelectorAll('#dealer-list .item-row')).map(row => ({ name: row.querySelector('.dealer-name').value, startHour: row.querySelector('.start-hour').value, startMinute: row.querySelector('.start-minute').value, endHour: row.querySelector('.end-hour').value, endMinute: row.querySelector('.end-minute').value, resultHTML: row.querySelector('.result').innerHTML, isClosed: row.querySelector('.close-btn').disabled, })),
-            players: players, 
+            players: players,
             ranks: globalRanks,
             customPrizes: JSON.parse(prizeDistributionBody.dataset.customPrizes || 'null'),
+            temporaryMembers: temporaryMembers
         };
     }
 
@@ -316,16 +354,17 @@
         tournamentSelect.value = state.tournamentId || 't1';
         updateDayOfWeek();
         (state.dealers || []).forEach(data => addDealerRow(data, false));
-        
+
         players = state.players || [];
-        
+        temporaryMembers = state.temporaryMembers || [];
+
         if (state.customPrizes) { prizeDistributionBody.dataset.customPrizes = JSON.stringify(state.customPrizes); }
         globalRanks = state.ranks || [];
-        
+
         refreshPlayerUI();
         updateAll(false);
     }
-    
+
     function updateAll(doSave = true) {
         renumberDealers();
         updateGameSummary();
@@ -336,7 +375,7 @@
             saveStateToFirebase();
         }
     }
-    
+
     async function saveGameArchive() {
         const stateToArchive = getCurrentState();
         if (stateToArchive.players.length === 0 && stateToArchive.dealers.length === 0) {
@@ -359,24 +398,22 @@
             alert("게임 저장에 실패했습니다.");
         }
     }
-    
-    // --- 여기부터 수정된(구현된) 코드입니다 ---
+
     async function startNewGame() {
         if (confirm('새로운 정산을 시작하시겠습니까? 현재 내용은 자동으로 저장됩니다.')) {
             try {
-                // 1. 현재 상태를 가져와서 보관합니다.
                 const stateToArchive = getCurrentState();
                 if (stateToArchive.players.length > 0 || stateToArchive.dealers.length > 0) {
                    await saveGameArchive();
                 }
+                
+                temporaryMembers = [];
 
-                // 2. 새로운 빈 게임 상태로 latestState를 덮어씁니다.
                 const today = new Date();
                 const newGameDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null };
-                
+                const emptyState = { date: newGameDate, tournamentId: 't1', dealers: [], players: [], ranks: [], customPrizes: null, temporaryMembers: [] };
+
                 await setDoc(doc(db, "gameStates", "latestState"), emptyState);
-                // onSnapshot 리스너가 이 변경을 감지하고 모든 클라이언트의 화면을 자동으로 새로고침합니다.
 
             } catch (error) {
                 console.error("새 게임 시작 중 오류:", error);
@@ -384,11 +421,11 @@
             }
         }
     }
-    // --- 여기까지 수정된(구현된) 코드입니다 ---
 
     function resetUI(doUpdate = true) {
         dealerList.innerHTML = '';
         players = [];
+        temporaryMembers = [];
         prizeDistributionBody.removeAttribute('data-custom-prizes');
         globalRanks = [];
         if (doUpdate) {
@@ -402,16 +439,18 @@
     function setToday() { const today = new Date(); gameDateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); updateDayOfWeek(); }
     function updateDayOfWeek() { const selectedDate = new Date(gameDateEl.value); const dayIndex = new Date(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()).getDay(); dayOfWeekEl.textContent = `(${KOREAN_DAYS[dayIndex]})`; updateGameInfoDisplay(); }
     function updateGameInfoDisplay() { const date = gameDateEl.value; const dayOfWeek = dayOfWeekEl.textContent; const tournamentText = tournamentSelect.options[tournamentSelect.selectedIndex].text; if (date) { gameInfoDisplayEl.textContent = `${date} ${dayOfWeek} / ${tournamentText}`; } else { gameInfoDisplayEl.textContent = ''; } }
-    
+
     function renumberDealers() { document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { let numEl = row.querySelector('.dealer-num'); if (!numEl) { numEl = document.createElement('strong'); numEl.className = 'dealer-num'; row.prepend(numEl); } numEl.textContent = `${index + 1}.`; }); }
-    
+
     function addDealerRow(data = {}, doUpdate = true) {
         const row = document.createElement('div'); row.className = 'item-row';
         const hourOptions = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
         const minOptions = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}</option>`).join('');
-        
-        let dealerOptionsHTML = createDropdownOptions(DEALER_NAMES, data.name, true);
-        if (data.name && !DEALER_NAMES.includes(data.name)) {
+
+        const combinedMembers = [...new Set([...groupMembers, ...temporaryMembers])].sort();
+        let dealerOptionsHTML = createDropdownOptions(combinedMembers, data.name, true);
+
+        if (data.name && !combinedMembers.includes(data.name)) {
             dealerOptionsHTML += `<option value="${data.name}" selected>${data.name}</option>`;
         }
 
@@ -424,7 +463,7 @@
     }
 
     function handleDealerActions(e) { const target = e.target; const row = target.closest('.item-row'); if (!row) return; if (target.matches('.delete-btn')) { row.remove(); updateAll(); } else if (target.matches('.start-now-btn')) { const now = new Date(); row.querySelector('.start-hour').value = now.getHours(); row.querySelector('.start-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.end-now-btn')) { const now = new Date(); row.querySelector('.end-hour').value = now.getHours(); row.querySelector('.end-minute').value = now.getMinutes(); updateAll(); } else if (target.matches('.close-btn')) { const baseDate = gameDateEl.value; if (!baseDate) { alert("날짜를 먼저 선택해 주세요."); return; } const startTime = new Date(`${baseDate}T${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`); const endTime = new Date(`${baseDate}T${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`); if (endTime < startTime) endTime.setDate(endTime.getDate() + 1); const durationMinutes = Math.round((endTime - startTime) / (1000 * 60)); const points = durationMinutes * 5; row.querySelector('.result').innerHTML = `<span>${durationMinutes}</span>분, <span>${points.toLocaleString()}</span>포인트`; row.querySelectorAll('select, .action-btn, .close-btn').forEach(el => el.disabled = true); row.querySelector('.delete-btn').disabled = false; updateAll(); } }
-    
+
     function handleDealerInputs(e) {
         const target = e.target;
         const row = target.closest('.item-row');
@@ -438,6 +477,11 @@
                     const newOption = new Option(newName, newName);
                     target.add(newOption);
                     target.value = newName;
+                    
+                    if (!temporaryMembers.includes(newName) && !groupMembers.includes(newName)) {
+                        temporaryMembers.push(newName);
+                    }
+
                 } else {
                     target.value = '';
                 }
@@ -447,30 +491,29 @@
             updateAll();
         }
     }
-    
+
     function updateDealerSummaryTable() { dealerSummaryBody.innerHTML = ''; document.querySelectorAll('#dealer-list .item-row').forEach((row, index) => { if (row.querySelector('.close-btn').disabled) { const name = row.querySelector('.dealer-name').value; const startTime = `${String(row.querySelector('.start-hour').value).padStart(2, '0')}:${String(row.querySelector('.start-minute').value).padStart(2, '0')}`; const endTime = `${String(row.querySelector('.end-hour').value).padStart(2, '0')}:${String(row.querySelector('.end-minute').value).padStart(2, '0')}`; const resultSpans = row.querySelectorAll('.result span'); const minutes = resultSpans[0] ? resultSpans[0].textContent : 'N/A'; const points = resultSpans[1] ? resultSpans[1].textContent : 'N/A'; const tr = document.createElement('tr'); tr.innerHTML = `<td>${index + 1}</td><td>${name}</td><td>${startTime}</td><td>${endTime}</td><td>${minutes} 분</td><td>${points} 포인트</td>`; dealerSummaryBody.appendChild(tr); } }); }
-    
+
     function refreshPlayerUI() {
         const selectedValue = playerSelector.value;
         playerSelector.innerHTML = '<option value="">--플레이어 선택--</option>';
         playerSelector.add(new Option('--- 새 플레이어 추가 ---', '__ADD_NEW__'));
         
-        let allPlayerNames = [...PLAYER_NAMES, ...players.map(p => p.name)];
-        allPlayerNames = [...new Set(allPlayerNames)].sort(); 
+        const combinedMembers = [...new Set([...groupMembers, ...temporaryMembers])].sort();
 
-        allPlayerNames.forEach(name => {
+        combinedMembers.forEach(name => {
             if (name) {
                 const option = new Option(name, name);
                 playerSelector.add(option);
             }
         });
-        
+
         try {
             playerSelector.value = selectedValue;
         } catch(e) {
             playerSelector.value = "";
         }
-        
+
         updatePlayerSummaryTable();
         updatePlayerDetailsPanel();
     }
@@ -480,11 +523,15 @@
 
         if (selectedName === '__ADD_NEW__') {
             const newName = prompt("새로운 플레이어 이름을 입력하세요:");
-            
             playerSelector.value = '';
 
             if (newName && newName.trim() !== '') {
                 const trimmedName = newName.trim();
+                
+                if (!temporaryMembers.includes(trimmedName) && !groupMembers.includes(trimmedName)) {
+                    temporaryMembers.push(trimmedName);
+                }
+
                 if (players.some(p => p.name === trimmedName)) {
                     alert("이미 참가한 플레이어입니다.");
                     playerSelector.value = trimmedName;
@@ -508,13 +555,74 @@
                 players.push(player);
                 resetPrizeAndRanks();
                 refreshPlayerUI();
-                playerSelector.value = selectedName; 
+                playerSelector.value = selectedName;
                 updateAll();
             }
         }
-        
+
         updatePlayerDetailsPanel();
     }
+    
+    // --- 여기부터 수정된(구현된) 코드입니다 ---
+    function handleAddNewMemberClick() {
+        // '다시 묻지 않기'가 체크되어 있는지 확인
+        if (localStorage.getItem('memberAuthGranted') === 'true') {
+            proceedWithAddingMember();
+        } else {
+            // 암호 모달을 띄움
+            document.getElementById('password-modal-input').value = '';
+            document.getElementById('remember-auth-check').checked = false;
+            passwordModal.style.display = 'flex';
+            document.getElementById('password-modal-input').focus();
+        }
+    }
+
+    async function proceedWithAddingMember() {
+        const newMemberName = prompt("추가할 모임 멤버의 이름을 입력하세요:");
+        if (newMemberName && newMemberName.trim() !== "") {
+            const trimmedName = newMemberName.trim();
+
+            const combinedMembers = [...groupMembers, ...temporaryMembers];
+            if (combinedMembers.includes(trimmedName)) {
+                alert("이미 등록된 이름입니다.");
+                return;
+            }
+
+            try {
+                const memberDocRef = doc(db, "lists", "members");
+                await updateDoc(memberDocRef, {
+                    names: arrayUnion(trimmedName)
+                });
+                alert(`'${trimmedName}' 님을 모임 멤버로 추가했습니다.`);
+            } catch (error) {
+                console.error("모임 멤버 추가 실패:", error);
+                alert("멤버 추가 중 오류가 발생했습니다.");
+            }
+        }
+    }
+
+    function handlePasswordModalActions(e) {
+        const target = e.target;
+        if (target.matches('#password-modal-close-btn') || !target.closest('.modal-content')) {
+            passwordModal.style.display = 'none';
+        } else if (target.matches('#password-modal-confirm-btn')) {
+            const passwordInput = document.getElementById('password-modal-input');
+            const rememberCheck = document.getElementById('remember-auth-check');
+
+            if (passwordInput.value === 'poker123!') {
+                if (rememberCheck.checked) {
+                    localStorage.setItem('memberAuthGranted', 'true');
+                }
+                passwordModal.style.display = 'none';
+                proceedWithAddingMember();
+            } else {
+                alert('암호가 틀렸습니다.');
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        }
+    }
+    // --- 여기까지 수정된(구현된) 코드입니다 ---
 
     function updatePlayerDetailsPanel() {
         const selectedName = playerSelector.value;
@@ -886,7 +994,7 @@
     function prizeConfigForCount(count) { if (count >= 5 && count <= 7) return [{ r: 1, p: 0.65 }, { r: 2, p: 0.35 }]; if (count >= 8 && count <= 11) return [{ r: 1, p: 0.60 }, { r: 2, p: 0.30 }, { r: 3, p: 0.10 }]; if (count >= 12 && count <= 17) return [{ r: 1, p: 0.50 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }]; if (count >= 18 && count <= 35) return [{ r: 1, p: 0.45 }, { r: 2, p: 0.25 }, { r: 3, p: 0.15 }, { r: 4, p: 0.10 }, { r: 5, p: 0.05 }]; return []; }
     
     document.addEventListener('DOMContentLoaded', () => {
-        setupRealtimeListener();
+        setupRealtimeListeners();
         addAllEventListeners();
     });
 </script>

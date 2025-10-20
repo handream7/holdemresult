@@ -7,10 +7,9 @@ from firebase_admin import credentials, firestore
 import os
 
 # --- Firebase Admin SDK 초기화 ---
-# ‼️ 중요: 'your-key-file.json' 부분을 실제 다운로드한 키 파일 이름으로 변경하세요.
 try:
-    key_file_name = 'holdemresult-8e89d-firebase-adminsdk-fbsvc-257ead2785.json' # 예시 파일 이름
-    key_path = os.path.join(os.path.dirname(__file__), key_file_name) 
+    key_file_name = 'holdemresult-8e89d-firebase-adminsdk-fbsvc-257ead2785.json'
+    key_path = os.path.join(os.path.dirname(__file__), key_file_name)
     cred = credentials.Certificate(key_path)
     firebase_admin.initialize_app(cred)
     db = firestore.client()
@@ -22,22 +21,18 @@ except Exception as e:
 app = Flask(__name__)
 CORS(app)
 
-PLAYER_NAMES = [
-    "강아지똥", "개아범", "고구마", "곰인", "귤", "나미", "나인", "노하", "돌멩이", "돌체", "디네로", "뚜", "룰루", "림프", "망고", "문문", "상일", "세준", "송하", "스냅", "승민", "안아줘요", "야도란", "영재", "영준", "예수", "오팔", "옥수수", "용준", "우주", "유미", "의성", "이방인", "인사이더", "자쓰민", "장현", "재혁", "재형", "지구", "지호", "진상", "찐빵", "철", "체크", "카피바라", "쿠쿠", "태산", "태은", "티라미슈", "팔팔", "팝스타", "팬더", "포카드", "하람", "현", "호준", "홍", "화학" ,"환경", "황", "훈", "BOK", "DD", "DY", "HM", "KJ", "Lin"
-]
-DEALER_NAMES = PLAYER_NAMES
-
 # 기본 페이지('/') 렌더링
+# 이제 하드코딩된 리스트를 전달하지 않습니다. 클라이언트에서 직접 Firebase 데이터를 가져옵니다.
 @app.route('/')
 def home():
-    return render_template('index.html', dealers=DEALER_NAMES, players=PLAYER_NAMES)
+    return render_template('index.html')
 
 # ## 데이터 제공 API 엔드포인트 ##
 @app.route('/api/game-data')
 def get_game_data():
     if not db:
         return jsonify({"error": "Firebase is not initialized."}), 500
-        
+
     try:
         doc_ref = db.collection('gameStates').document('latestState')
         doc = doc_ref.get()
@@ -46,7 +41,7 @@ def get_game_data():
             return jsonify({"error": "No data found"}), 404
 
         state = doc.to_dict()
-        
+
         players_data = state.get('players', [])
         player_summary = []
         for index, player in enumerate(players_data):
@@ -62,9 +57,9 @@ def get_game_data():
 
         total_buy_ins = sum(len(p.get('entries', [])) for p in players_data)
         total_prize = total_buy_ins * 250
-        
+
         prize_summary = { "total_prize": total_prize }
-        
+
         response_data = {
             "player_status": player_summary,
             "prize_status": prize_summary,
